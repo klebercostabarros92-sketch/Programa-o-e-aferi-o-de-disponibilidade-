@@ -2,6 +2,7 @@ const CIOT_CLICKUP_CONFIG_ = {
   VIEW_ID: '8cdtzje-83333',
   LIST_ID: '901314444834',
   LOCAL_AGENT_URL: 'http://127.0.0.1:30248/emitir-ciot',
+  WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwCEFA5eMapL8oPhRzv0kR3Z4ePPh6JvY9_R7DVlfRKJ5HhVK3wd9iz4Z4diKSZqk3hhg/exec',
   LOG_SHEET_NAME: 'LOG_CIOT',
   REPORT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/5mTLgyAAAAE/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=2UgHe0GO03HrYSJO8WikqObLd1ZKUrJpNjnJ9C2fgPM',
 };
@@ -53,6 +54,7 @@ function prepararCiotClickUpCsv() {
 }
 
 function getCiotLogCallbackUrl_() {
+  if (CIOT_CLICKUP_CONFIG_.WEB_APP_URL) return CIOT_CLICKUP_CONFIG_.WEB_APP_URL;
   try {
     return ScriptApp.getService().getUrl() || '';
   } catch (e) {
