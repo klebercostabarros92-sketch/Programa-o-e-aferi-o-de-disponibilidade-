@@ -70,19 +70,20 @@ const CONFIG = {
         WEIGHT: '10aef632-0456-4dca-aaa3-4b8d3aa50246',
         DELIVERIES: 'd90d0ef8-38a5-4bb7-93f8-093199455d00',
         MODALITY: '1ccf5e86-41cf-40a4-9178-fe15d3b47b6b',
-        LOADING_DATE_TEXT: 'bff54544-f232-4f89-b994-6185855b3719',
+        LOADING_DATE_TEXT: 'bff54544-f232-4f89-b994-6185855b3719', // 🤖 DATA DE SAÍDA
         LOADING_DATE_TS: 'b874d22f-a42d-4b83-84dc-752d9c4a4d2d',
-        CREATED_AT_TS: 'c2766029-b7e2-4f54-a844-f88c9da0c651',
+        LOADING_DATE_CARG: 'c2766029-b7e2-4f54-a844-f88c9da0c651', // ⏰ DATA CARREGAMENTO
         PLACA_BOT: '08c3c2bb-d87a-4a14-8711-8385ed687f94',
-        JANELA_COLETA: 'f7bd644e-c363-4842-9474-5b1c1d537b59',
+        JANELA_COLETA: 'f7bd644e-c363-4842-9474-51bc1d537b59', // Atualizado de 5b1c para 51bc
+        MOTORISTA: '86362270-4f7c-4700-b4d9-8d307cf14339',
       },
     },
   },
   ATTEMICS: {
     BASE_URL_SEND_TEXT: 'https://api.attemics.com.br/core/v2/api/chats/send-text',
-    ACCESS_TOKEN: '',
+    ACCESS_TOKEN: '669557bad8699aa536cfb9bb',
     TEST_MODE_DEFAULT: true,
-    TEST_NUMBER: '35998182404',
+    TEST_NUMBER: '4192312058',
     SEND_DELAY_SECONDS: 1.5,
     MAX_PER_RUN: 30,
     LOCK_TIMEOUT_MS: 10000,
@@ -249,93 +250,30 @@ function diagnosticarEstruturaMotoristasClickUp() {
  */
 function diagnosticarNovoClickUp() {
   const ui = SpreadsheetApp.getUi();
+  const listId = '901314444834';
   
   try {
     const token = getClickUpApiKey_();
+    let report = '--- IDs ENCONTRADOS PARA A LISTA: ' + listId + ' --- \n\n';
     
-    // 1. Listar Workspaces (Teams) para confirmar o ID
-    const teamsUrl = CONFIG.CLICKUP.BASE_URL + '/team';
-    const teamsResp = UrlFetchApp.fetch(teamsUrl, { headers: { Authorization: token } });
-    const teams = JSON.parse(teamsResp.getContentText()).teams;
+    const fieldsUrl = CONFIG.CLICKUP.BASE_URL + '/list/' + listId + '/field';
+    const fieldsResp = UrlFetchApp.fetch(fieldsUrl, { headers: { Authorization: token } });
+    const fields = JSON.parse(fieldsResp.getContentText()).fields;
     
-    let report = '--- DIAGNÓSTICO CLICKUP --- \n\n';
-    report += 'WORKSPACES ACESSÍVEIS:\n';
+    const targets = ['PLACA', 'MOTORISTA', 'PLANO', 'JANELA', 'UNIDADE', 'DATA'];
     
-    const allLists = [];
-    
-    teams.forEach(function(team) {
-      report += 'Workspace: ' + team.name + ' (ID: ' + team.id + ')\n';
-      
-      // 2. Listar espaços (Spaces)
-      try {
-        const spacesUrl = CONFIG.CLICKUP.BASE_URL + '/team/' + team.id + '/space?archived=false';
-        const spacesResp = UrlFetchApp.fetch(spacesUrl, { headers: { Authorization: token }, muteHttpExceptions: true });
-        if (spacesResp.getResponseCode() !== 200) {
-          report += '  [!] Erro ao listar spaces: HTTP ' + spacesResp.getResponseCode() + ' - ' + spacesResp.getContentText().slice(0, 100) + '\n';
-        } else {
-          const spaces = JSON.parse(spacesResp.getContentText()).spaces;
-          if (spaces.length === 0) report += '  (Nenhum space encontrado)\n';
-          
-          spaces.forEach(function(s) {
-            report += '- Space: ' + s.name + ' (ID: ' + s.id + ')\n';
-            
-            // 3. Buscar Folders
-            try {
-              const foldersUrl = CONFIG.CLICKUP.BASE_URL + '/space/' + s.id + '/folder?archived=false';
-              const foldersResp = UrlFetchApp.fetch(foldersUrl, { headers: { Authorization: token }, muteHttpExceptions: true });
-              if (foldersResp.getResponseCode() === 200) {
-                const folders = JSON.parse(foldersResp.getContentText()).folders;
-                folders.forEach(function(f) {
-                  report += '  > Folder: ' + f.name + ' (ID: ' + f.id + ')\n';
-                  if (f.lists) {
-                    f.lists.forEach(function(l) {
-                      report += '    * List: ' + l.name + ' (ID: ' + l.id + ')\n';
-                      allLists.push(l);
-                    });
-                  }
-                });
-              }
-            } catch(eFolders) { report += '    [!] Erro em folders: ' + eFolders.message + '\n'; }
-            
-            // 4. Buscar Listas sem pastas (Folderless)
-            try {
-              const folderlessUrl = CONFIG.CLICKUP.BASE_URL + '/space/' + s.id + '/list?archived=false';
-              const flResp = UrlFetchApp.fetch(folderlessUrl, { headers: { Authorization: token }, muteHttpExceptions: true });
-              if (flResp.getResponseCode() === 200) {
-                const fl = JSON.parse(flResp.getContentText()).lists;
-                fl.forEach(function(l) {
-                  report += '    * List: ' + l.name + ' (ID: ' + l.id + ') [Folderless]\n';
-                  allLists.push(l);
-                });
-              }
-            } catch(eFl) { report += '    [!] Erro em folderless: ' + eFl.message + '\n'; }
-          });
-        }
-      } catch(eSpaces) {
-        report += 'Erro fatal no workspace ' + team.id + ': ' + eSpaces.message + '\n';
+    fields.forEach(function(f) {
+      const name = String(f.name || '').toUpperCase();
+      const match = targets.some(function(t) { return name.indexOf(t) !== -1; });
+      if (match) {
+        report += f.name + ': ' + f.id + '\n';
       }
     });
 
-    if (allLists.length > 0) {
-      // Tentar pegar campos da primeira lista da lista "allLists" que contenha PROGRAMA ou 3C
-      const targetList = allLists.find(function(l) { 
-        return l.name.toUpperCase().indexOf('PROGRAMA') !== -1 || l.name.toUpperCase().indexOf('3C') !== -1; 
-      }) || allLists[0];
-
-      report += '\n--- ANALISANDO CAMPOS DA LISTA: ' + targetList.name + ' (' + targetList.id + ') ---\n';
-      const fieldsUrl = CONFIG.CLICKUP.BASE_URL + '/list/' + targetList.id + '/field';
-      const fieldsResp = UrlFetchApp.fetch(fieldsUrl, { headers: { Authorization: token } });
-      const fields = JSON.parse(fieldsResp.getContentText()).fields;
-      
-      fields.forEach(function(f) {
-        report += '- Campo: ' + f.name + ' | ID: ' + f.id + ' | Tipo: ' + f.type + '\n';
-      });
-    } else {
-      report += '\nNenhuma lista encontrada.';
-    }
+    report += '\n(Se algum campo faltar, me avise ou mande o log completo do console)';
     
     console.log(report);
-    ui.alert('Relatório de Diagnóstico ClickUp', report.slice(0, 1500) + (report.length > 1500 ? '\n... (continua no log)' : ''), ui.ButtonSet.OK);
+    ui.alert('IDs Selecionados', report, ui.ButtonSet.OK);
     
     return report;
     
@@ -538,8 +476,10 @@ function onOpen() {
   }
 
   menuMsg
-    .addItem('\ud83d\udce8 Enviar 1a Mensagem (WhatsApp)', 'enviarAttemicsPrimeiraMensagemTeste')
-    .addItem('\ud83d\udcec Enviar 2a Mensagem (WhatsApp)', 'enviarAttemicsSegundaMensagemTeste');
+    .addItem('\ud83d\udce8 Enviar 1a Mensagem (REAL)', 'enviarAttemicsPrimeiraMensagemProd')
+    .addItem('\ud83d\udcec Enviar 2a Mensagem (REAL)', 'enviarAttemicsSegundaMensagemProd')
+    .addSeparator()
+    .addItem('\ud83e\uddea Enviar TESTE (Número Configurado)', 'enviarAttemicsPrimeiraMensagemTeste');
 
   menu3C
     .addItem('Atualizar planilhas', 'atualizarPlanilhas3Coracoes')
@@ -554,9 +494,6 @@ function onOpen() {
   menuClickUp
     .addItem('\u{1f4cc} Criar Cards', 'criarCardsClickUpProgramacao')
     .addItem('\u{1f50e} Buscando dados', 'preencherCamposCardsClickUpProgramacao')
-    .addSeparator()
-    .addItem('\u{1f50d} Analisar Novo Workspace', 'diagnosticarNovoClickUp')
-    .addItem('\u{1f9ea} Diagnosticar Campos (Atual)', 'diagnosticarCamposClickUpProgramacao')
     ;
 
   menuOps.addToUi();
@@ -2306,7 +2243,19 @@ function previewAttemicsSegundaMensagemTeste() {
 }
 
 function enviarAttemicsPrimeiraMensagemTeste() {
+  return runAttemicsPrimeiraMensagem_({ previewOnly: false, testMode: true, debug: false });
+}
+
+function enviarAttemicsSegundaMensagemTeste() {
+  return runAttemicsSegundaMensagem_({ previewOnly: false, testMode: true, debug: false });
+}
+
+function enviarAttemicsPrimeiraMensagemProd() {
   return runAttemicsPrimeiraMensagem_({ previewOnly: false, testMode: false, debug: false });
+}
+
+function enviarAttemicsSegundaMensagemProd() {
+  return runAttemicsSegundaMensagem_({ previewOnly: false, testMode: false, debug: false });
 }
 
 function syncPlacaMotoristaParaFonte3CoracoesByPlano_() {
@@ -3222,9 +3171,17 @@ function getClickUpProgramacaoFieldEntries_(rowCtx, options) {
   add(c.MODALITY, rowCtx.perfil ? String(rowCtx.perfil).toUpperCase().trim() : '');
   add(c.LOADING_DATE_TEXT, loadingDateText);
   if (loadingDateTs != null) add(c.LOADING_DATE_TS, loadingDateTs);
-  add(c.CREATED_AT_TS, new Date().getTime());
+  
+  // Data de Carregamento (⏰ DATA CARREGAMENTO)
+  const loadingDateCargStr = String(rowCtx.dataCarregamento || '').trim();
+  if (loadingDateCargStr) {
+    add(c.LOADING_DATE_CARG, loadingDateCargStr);
+  }
+
   if (includePlaca) add(c.PLACA_BOT, rowCtx.placa ? String(rowCtx.placa) : '');
   add(c.JANELA_COLETA, rowCtx.faixaAgendaProgramacao ? String(rowCtx.faixaAgendaProgramacao) : '');
+  add(c.MOTORISTA, rowCtx.motorista ? String(rowCtx.motorista) : '');
+  
   return entries;
 }
 
@@ -8663,32 +8620,61 @@ function syncProgramacaoPlacaMotoristaParaMensagemBaseAttemics_(options) {
 }
 
 function sendAttemicsTextMessage_(payload, options) {
-  // =============================================
-  // WHATSAPP VIA CHATBOT (substitui Attemics API)
-  // =============================================
-  var number = String(payload.number || '');
-  var message = sanitizeMessageTextForAttemics_(payload.message || '');
+  const cfg = getAttemicsConfig_();
+  const number = String(payload.number || '');
+  const message = sanitizeMessageTextForAttemics_(payload.message || '');
   if (!number) throw new Error('Número de telefone vazio');
   if (!message) throw new Error('Mensagem vazia');
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = getOrCreateFilaWhatsAppSheet_(ss);
+  // URL e Token do CONFIG
+  const url = cfg.BASE_URL_SEND_TEXT;
+  const token = cfg.ACCESS_TOKEN;
 
-  sheet.appendRow([
-    formatDateTimeBR_(new Date()),
-    number,
-    message,
-    'PENDENTE',
-    '',
-    ''
-  ]);
+  if (!token) throw new Error('Token da Attemics não configurado.');
+
+  const headers = {
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json'
+  };
+
+  const body = {
+    number: number,
+    message: message
+  };
+
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: headers,
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true
+  });
+
+  const code = response.getResponseCode();
+  const responseText = response.getContentText() || '';
+
+  // Registro na fila para histórico (opcional, mantendo o que já existia mas com status diferente)
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = getOrCreateFilaWhatsAppSheet_(ss);
+    sheet.appendRow([
+      formatDateTimeBR_(new Date()),
+      number,
+      message,
+      code === 200 ? 'ENVIADO_API' : 'ERRO_API',
+      code,
+      truncateText_(responseText, 200)
+    ]);
+  } catch (eLog) {
+    appCodeLog_('[ERROR] Falha ao logar na fila WhatsApp', { erro: eLog.message });
+  }
 
   return {
-    ok: true,
-    httpStatus: 200,
-    httpStatusText: 'Queued for WhatsApp',
-    responseText: '{"queued":true}',
-    requestBody: { number: number, message: message },
+    ok: code === 200 || code === 201,
+    httpStatus: code,
+    httpStatusText: responseText.slice(0, 50),
+    responseText: responseText,
+    requestBody: body,
   };
 }
 
