@@ -8362,6 +8362,16 @@ function buildDisponibilidadeContatoIndexForAttemics_() {
   return index;
 }
 
+// Células de hora/tempo formatadas como data retornam "30/12/1899" quando vazias (serial 0 do Sheets).
+// Esta função converte qualquer artefato de data (dd/mm/aaaa) para string vazia.
+function cleanSheetTimeCell_(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  if (!s) return '';
+  // Padrão dd/mm/aaaa ou d/m/aaaa — claramente uma data, não um horário de agenda
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) return '';
+  return s;
+}
+
 function buildAttemicsMessageRowsByPlano_(options) {
   const opts = options || {};
   const ss = opts.ss || SpreadsheetApp.getActiveSpreadsheet();
@@ -8428,8 +8438,8 @@ function buildAttemicsMessageRowsByPlano_(options) {
       telefoneDestino: testNumber,
       dataSaida: String(p[cProgDataSaida - 1] || '').trim(),
       dataCarregamento: cProgDataCarr ? String(p[cProgDataCarr - 1] || '').trim() : '',
-      faixaAgendaProgramacao: cProgFaixa ? String(p[cProgFaixa - 1] || '').trim() : '',
-      agendaCarregamento: (cProgFaixa ? String(p[cProgFaixa - 1] || '').trim() : '') || (cMsgHora ? String(msg[cMsgHora - 1] || '').trim() : ''),
+      faixaAgendaProgramacao: cProgFaixa ? cleanSheetTimeCell_(p[cProgFaixa - 1]) : '',
+      agendaCarregamento: (cProgFaixa ? cleanSheetTimeCell_(p[cProgFaixa - 1]) : '') || (cMsgHora ? cleanSheetTimeCell_(msg[cMsgHora - 1]) : ''),
       horarioAgendaMsgBase: cMsgHora ? String(msg[cMsgHora - 1] || '').trim() : '',
       regiao: cProgZona ? String(p[cProgZona - 1] || '').trim() : '',
       cidade: cMsgCidade ? String(msg[cMsgCidade - 1] || '').trim() : '',
