@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        margin: 0;
+        padding: 18px;
+        font-family: Arial, sans-serif;
+        color: #111827;
+      }
+      .title {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .text {
+        font-size: 13px;
+        line-height: 1.45;
+        color: #4b5563;
+        margin-bottom: 14px;
+      }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 8px;
+        padding: 11px 14px;
+        background: #166534;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: .65;
+      }
+      .status {
+        margin-top: 12px;
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+      .ok { color: #166534; }
+      .err { color: #b91c1c; }
+    </style>
+  </head>
+  <body>
+    <div class="title">Emitir CIOT</div>
+    <div class="text">
+      Gera o relatorio pela API do ClickUp, envia para o agente local e inicia o app SSW CIOT.
+    </div>
+    <button id="run" onclick="runCiot()">Emitir CIOT</button>
+    <div id="status" class="status"></div>
+
+    <script>
+      var LOCAL_AGENT_URL = <?!= JSON.stringify(localAgentUrl) ?>;
+
+      function setStatus(text, cls) {
+        var el = document.getElementById('status');
+        el.className = 'status ' + (cls || '');
+        el.textContent = text || '';
+      }
+
+      function runCiot() {
+        var btn = document.getElementById('run');
+        btn.disabled = true;
+        setStatus('Gerando CSV no ClickUp...', '');
+
+        google.script.run
+          .withSuccessHandler(function (payload) {
+            setStatus('CSV gerado (' + payload.rows + ' linhas). Enviando para o Windows...', '');
+            fetch(LOCAL_AGENT_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+              .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+              .then(function (res) {
+                if (!res.ok || !res.data || !res.data.ok) {
+                  throw new Error((res.data && res.data.message) || 'Falha no agente local.');
+                }
+                setStatus('Pronto. CSV atualizado e start.bat iniciado.\nArquivo: ' + res.data.filename, 'ok');
+              })
+              .catch(function (err) {
+                setStatus('Nao consegui falar com o agente local em ' + LOCAL_AGENT_URL + '.\nAbra o arquivo ciot-local-agent.bat na pasta ssw-ciot-app-main e tente novamente.\n\nDetalhe: ' + (err && err.message ? err.message : err), 'err');
+              })
+              .finally(function () { btn.disabled = false; });
+          })
+          .withFailureHandler(function (err) {
+            btn.disabled = false;
+            setStatus('Erro ao gerar CSV: ' + (err && err.message ? err.message : err), 'err');
+          })
+          .prepararCiotClickUpCsv();
+      }
+    </script>
+  </body>
+</html>

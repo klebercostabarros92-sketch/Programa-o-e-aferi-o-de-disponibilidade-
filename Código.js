@@ -649,6 +649,8 @@ function onOpen() {
     .addItem('\u{1f4cc} Criar Cards', 'criarCardsClickUpProgramacao')
     .addItem('Preparar Log Programa\u00e7\u00e3o', 'setupProgramacaoLog')
     .addItem('\u{1f50e} Buscando dados', 'preencherCamposCardsClickUpProgramacao')
+    .addItem('Emitir CIOT', 'emitirCiot')
+    .addItem('Enviar relatorio CIOT', 'enviarRelatorioCiotHoje')
     .addSeparator()
     .addItem('🔍 Diagnosticar IDs ClickUp', 'diagnosticarIdsClickUp')
     ;
@@ -11550,8 +11552,12 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  return ContentService.createTextOutput('Method Not Allowed')
-    .setMimeType(ContentService.MimeType.TEXT);
+  if (typeof handleCiotLogPost_ === 'function') {
+    return handleCiotLogPost_(e);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ ok: false, message: 'Method Not Allowed' }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
