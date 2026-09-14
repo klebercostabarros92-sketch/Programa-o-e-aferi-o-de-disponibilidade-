@@ -84,7 +84,7 @@ const CONFIG = {
     ACCESS_TOKEN: '669557bad8699aa536cfb9bb',
     TEST_MODE_DEFAULT: true,
     TEST_NUMBER: '4192312058',
-    SEND_DELAY_SECONDS: 1.5,
+    SEND_DELAY_SECONDS: 2,
     MAX_PER_RUN: 30,
     LOCK_TIMEOUT_MS: 10000,
     RETRY_HTTP_ONCE: true,
@@ -8640,8 +8640,8 @@ function sendAttemicsTextMessage_(payload, options) {
 
   const body = {
     number: number,
-    message: message
-    // Outros campos opcionais suportados: forceSend, verifyContact, etc.
+    message: message,
+    forceSend: true
   };
 
   const response = UrlFetchApp.fetch(url, {
