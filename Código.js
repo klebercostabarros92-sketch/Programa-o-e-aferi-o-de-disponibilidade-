@@ -42,7 +42,7 @@ const CONFIG = {
     TOKEN: '',
     BASE_URL: 'https://api.clickup.com/api/v2',
     LIST_ID_MOTORISTAS: '901308597214',
-    PAGE_SIZE: 500,
+    PAGE_SIZE: 10,
     UNIDADE_FIELD: '🟢 Cliente / Unidade',
     UNIDADE_ALVO: 'CAFÉ 3C GUARULHOS',
     STATUS_FIELD: 'STATUS',
