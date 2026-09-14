@@ -203,6 +203,47 @@ function diagnosticarAuthClickUp() {
   };
 }
 
+function diagnosticarEstruturaMotoristasClickUp() {
+  const ctx = { step: 'diagnostico_clickup' };
+  try {
+    const listId = CONFIG.CLICKUP.LIST_ID_MOTORISTAS;
+    appDebugPrint_('--- INICIO DIAGNOSTICO ESTRUTURA CLICKUP ---', { listId: listId });
+    
+    // Busca sem filtros de status na API para ver tudo o que existe
+    const tasks = fetchClickUpTasksByList_(listId, { debug: true });
+    appDebugPrint_('Tasks brutas baixadas', { count: tasks.length });
+
+    if (tasks.length === 0) {
+      appDebugPrint_('[ALERTA] Nenhuma task retornada pela API para esta lista.');
+      return { ok: false, error: 'Lista vazia' };
+    }
+
+    const sample = tasks.slice(0, 5);
+    sample.forEach(function(t, i) {
+      appDebugPrint_('Amostra ' + (i+1) + ': ' + t.name, {
+        id: t.id,
+        status: t.status && t.status.status,
+        tags: Array.isArray(t.tags) ? t.tags.map(function(tag){ return tag.name || tag; }) : [],
+        custom_fields: (t.custom_fields || []).map(function(cf) {
+          return {
+            name: cf.name,
+            value: cf.value,
+            resolved: resolveClickUpCustomFieldValue_(cf)
+          };
+        })
+      });
+    });
+
+    appDebugPrint_('--- FIM DIAGNOSTICO ---');
+    return { ok: true, count: tasks.length };
+  } catch (e) {
+    appDebugError_(e, ctx);
+    return { ok: false, error: String(e) };
+  } finally {
+    flushDebugLogBuffer_();
+  }
+}
+
 function listarCamposClickUpSemAcessoEdicao(taskIdOrUrl) {
   const cfg = getClickUpProgramacaoConfig_();
   let taskId = extractClickUpTaskIdFromInput_(taskIdOrUrl);
