@@ -524,6 +524,16 @@ function getInputValue_(input, keys) {
   return '';
 }
 
+/**
+ * Normalize uma chave de custom field do ClickUp para facilitar matching:
+ * remove emojis e caracteres estranhos, deixa apenas letras, dígitos, espaços, parênteses e hífens.
+ */
+function normalizeCustomFieldKey_(k) {
+  try {
+    return String(k || '').replace(/[^\wÀ-ÿ\s\(\)\-]/g, '').trim().toUpperCase();
+  } catch (e) { return String(k || '').toUpperCase(); }
+}
+
 function migrateHardcodedSecretsToProperties(input) {
   /*
    * TEMPORÁRIO: APAGAR APÓS EXECUTAR 1X
@@ -3244,9 +3254,17 @@ function indexClickUpTasksByPlano_(tasks) {
     const cfs = Array.isArray(task.custom_fields) ? task.custom_fields : [];
     for (let i = 0; i < cfs.length; i++) {
       const cf = cfs[i] || {};
-      if (planCfId && String(cf.id || '') !== planCfId) continue;
-      const k = normalizePlanoDigitsKey_(resolveClickUpCustomFieldValue_(cf));
-      if (k) keys.push(k);
+      // se existir o campo configurado explicitamente para 'PLAN', prioriza-o
+      if (planCfId && String(cf.id || '') === planCfId) {
+        const k = normalizePlanoDigitsKey_(resolveClickUpCustomFieldValue_(cf));
+        if (k) keys.push(k);
+        continue;
+      }
+      // Caso o campo 'PLAN' nao bata ou nao exista, tente indexar por qualquer custom field
+      try {
+        const possible = normalizePlanoDigitsKey_(resolveClickUpCustomFieldValue_(cf));
+        if (possible) keys.push(possible);
+      } catch (e) {}
     }
     keys.forEach(function (k) { if (k && !out.byPlanoKey[k]) out.byPlanoKey[k] = { task: task }; });
   });
@@ -10082,12 +10100,30 @@ function preencherQtdEFaixaLogProgramacao() {
   let faixaUpdates = 0;
   try {
     const cfgProg = getClickUpProgramacaoConfig_();
-    const listId = String((cfgProg && cfgProg.LIST_ID_CARDS) || CONFIG.CLICKUP.PROGRAMACAO.LIST_ID_CARDS || CONFIG.CLICKUP.LIST_ID_MOTORISTAS);
-    if (!listId) throw new Error('LIST_ID_CARDS ClickUp nao configurado.');
+    const listIdPrimary = String((cfgProg && cfgProg.LIST_ID_CARDS) || CONFIG.CLICKUP.PROGRAMACAO.LIST_ID_CARDS || CONFIG.CLICKUP.LIST_ID_MOTORISTAS);
+    const listIdFromLink = '901314444197'; // lista mostrada no link fornecido
+    const triedListIds = [];
+    let tasks = [];
+    let index = null;
 
-    // Buscar apenas tasks EM ROTA e FINALIZADO
-    const tasks = fetchClickUpTasksByList_(listId, { statuses: ['EM ROTA', 'FINALIZADO'] });
-    const index = indexClickUpTasksByPlano_(tasks);
+    // Tentar lista primaria e, se necessario, a lista do link (901314444197)
+    const candidateLists = [];
+    if (listIdPrimary) candidateLists.push(listIdPrimary);
+    if (listIdFromLink && candidateLists.indexOf(listIdFromLink) === -1) candidateLists.push(listIdFromLink);
+    for (let li = 0; li < candidateLists.length; li++) {
+      const lid = String(candidateLists[li] || '').trim();
+      if (!lid) continue;
+      triedListIds.push(lid);
+      try {
+        tasks = fetchClickUpTasksByList_(lid, {});
+        index = indexClickUpTasksByPlano_(tasks);
+        if (index && Object.keys(index.byPlanoKey || {}).length) break;
+      } catch (e) {
+        // ignora e tenta proxima lista
+        appCodeLog_('[WARN] falha ao buscar lista ClickUp: ' + lid + ' -> ' + String(e && e.message || e));
+      }
+    }
+    if (!index) index = indexClickUpTasksByPlano_(tasks || []);
 
     // Para cada linha do log, tenta achar task correspondente e extrair campo FAIXA
     const faixasOut = [];
@@ -10100,23 +10136,28 @@ function preencherQtdEFaixaLogProgramacao() {
         const ctx = { plano: planoVal };
         const found = findExistingClickUpTaskForPlano_(ctx, index);
         if (found && found.task) {
-          // Verifica unidade (filtrar Guarulhos)
           const task = found.task;
           const cfs = resolverCustomFieldsClickUp_(task);
-          // procura por campo que contenha 'UNIDADE' e verifica se contem 'GUARULHOS'
-          let unidadeOk = false;
-          Object.keys(cfs).forEach(function(k){
-            if (/UNIDADE/i.test(k) && String(cfs[k] || '').toUpperCase().indexOf('GUARULHOS') !== -1) unidadeOk = true;
+          // procura campo de faixa (qualquer chave contendo 'FAIXA' ou 'FAIXA KM')
+          Object.keys(cfs).some(function(k){
+            const nk = normalizeCustomFieldKey_(k);
+            if (nk.indexOf('FAIXA') !== -1) {
+              faixaVal = String(cfs[k] || '').trim();
+              return true;
+            }
+            return false;
           });
-          if (unidadeOk) {
-            // procura campo de faixa (qualquer chave contendo 'FAIXA')
-            Object.keys(cfs).some(function(k){
-              if (/FAIXA/i.test(k)) {
-                faixaVal = String(cfs[k] || '').trim();
-                return true;
-              }
-              return false;
-            });
+
+          // Se nao achou na custom field, tenta extrair da task.name (parte apos o hyphen ou texto semelhante)
+          if (!faixaVal) {
+            const nm = String(task.name || '').trim();
+            // tenta pegar texto apos ultimo '-' ou entre colchetes/parenteses
+            const mHy = nm.match(/-(.+)$/);
+            if (mHy && mHy[1]) faixaVal = mHy[1].trim();
+            if (!faixaVal) {
+              const mPar = nm.match(/\(([^)]+)\)/);
+              if (mPar && mPar[1]) faixaVal = mPar[1].trim();
+            }
           }
         }
       }
@@ -10135,6 +10176,251 @@ function preencherQtdEFaixaLogProgramacao() {
   toast_(ss, 'Atualizacao completa: Qtd entregas preenchida e Faixa atualizada (' + faixaUpdates + ').');
   return { ok: true, updatedQtd: true, updatedFaixa: faixaUpdates };
 }
+
+/**
+ * Função de debug: tenta mapear cada `Plano` presente em `Log_programação` para a task ClickUp
+ * e grava os resultados na aba `DEBUG_FAIXA_CLICKUP` para inspeção manual.
+ */
+function debugPreencherFaixaClickUp() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = (CFG.PROGRAMACAO_LOG && CFG.PROGRAMACAO_LOG.SHEET_NAME) || 'Log_programa\u00e7\u00e3o';
+  const shLog = findSheetCaseInsensitive_(ss, sheetName);
+  if (!shLog) throw new Error('Aba de log nao encontrada: ' + sheetName);
+
+  const headerRow = 1;
+  const hmapLog = mapHeaders_(shLog, headerRow);
+  const cPlanoLog = getHeaderColRequired_(hmapLog, ['PLANO', 'PLANOS', 'Plano']);
+
+  const lastRowLog = shLog.getLastRow();
+  const rowsLog = lastRowLog > headerRow ? shLog.getRange(headerRow + 1, 1, lastRowLog - headerRow, shLog.getLastColumn()).getValues() : [];
+
+  // Preparar ClickUp tasks/index
+  const cfgProg = getClickUpProgramacaoConfig_();
+  const listIdPrimary = String((cfgProg && cfgProg.LIST_ID_CARDS) || CONFIG.CLICKUP.PROGRAMACAO.LIST_ID_CARDS || CONFIG.CLICKUP.LIST_ID_MOTORISTAS);
+  const listIdFromLink = '901314444197';
+  const candidateLists = [];
+  if (listIdPrimary) candidateLists.push(listIdPrimary);
+  if (listIdFromLink && candidateLists.indexOf(listIdFromLink) === -1) candidateLists.push(listIdFromLink);
+
+  let allTasks = [];
+  for (let li = 0; li < candidateLists.length; li++) {
+    try {
+      const t = fetchClickUpTasksByList_(candidateLists[li], {});
+      allTasks = allTasks.concat(t || []);
+    } catch (e) {
+      appCodeLog_('[DEBUG] falha fetch lista ' + candidateLists[li] + ': ' + String(e && e.message || e));
+    }
+  }
+  const index = indexClickUpTasksByPlano_(allTasks || []);
+
+  // Criar/limpar sheet de debug
+  let shDbg = findSheetCaseInsensitive_(ss, 'DEBUG_FAIXA_CLICKUP');
+  if (!shDbg) shDbg = ss.insertSheet('DEBUG_FAIXA_CLICKUP');
+  shDbg.clear();
+  const headers = ['Row', 'Plano', 'FoundTaskId', 'TaskName', 'FaixaExtracted', 'CustomFieldsJSON'];
+  shDbg.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  const out = [];
+  for (let i = 0; i < rowsLog.length; i++) {
+    const row = rowsLog[i] || [];
+    const planoVal = String(row[cPlanoLog - 1] || '').trim();
+    let foundTaskId = '';
+    let taskName = '';
+    let faixaVal = '';
+    let cfsJson = '';
+    if (planoVal) {
+      const ctx = { plano: planoVal };
+      const found = findExistingClickUpTaskForPlano_(ctx, index);
+      if (found && found.task) {
+        const task = found.task;
+        foundTaskId = String(task.id || '');
+        taskName = String(task.name || '');
+        const cfs = resolverCustomFieldsClickUp_(task) || {};
+        cfsJson = JSON.stringify(cfs);
+        // procura por campo 'FAIXA'
+        Object.keys(cfs).some(function(k){
+          const nk = normalizeCustomFieldKey_(k);
+          if (nk.indexOf('FAIXA') !== -1) { faixaVal = String(cfs[k] || '').trim(); return true; }
+          return false;
+        });
+        if (!faixaVal) {
+          const mHy = taskName.match(/-(.+)$/);
+          if (mHy && mHy[1]) faixaVal = mHy[1].trim();
+          if (!faixaVal) {
+            const mPar = taskName.match(/\(([^)]+)\)/);
+            if (mPar && mPar[1]) faixaVal = mPar[1].trim();
+          }
+        }
+      }
+    }
+    out.push([i + 2, planoVal, foundTaskId, taskName, faixaVal, cfsJson]);
+  }
+
+  if (out.length) shDbg.getRange(2, 1, out.length, headers.length).setValues(out);
+  shDbg.autoResizeColumns(1, headers.length);
+  console.log('DEBUG_FAIXA_CLICKUP rows=' + out.length);
+  return { ok: true, rows: out.length };
+}
+
+/**
+ * Sincroniza a coluna `Faixa` da aba `Log_programação` a partir do ClickUp.
+ * Projetado para rodar periodicamente (ex: a cada 1 hora) e atualizar somente
+ * linhas que tenham plano correspondente em ClickUp (procura por plano antes do '-')
+ * considerando os 10 primeiros dígitos quando aplicável.
+ */
+function syncFaixaFromClickUpHourly() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = (CFG.PROGRAMACAO_LOG && CFG.PROGRAMACAO_LOG.SHEET_NAME) || 'Log_programa\u00e7\u00e3o';
+  let shLog = findSheetCaseInsensitive_(ss, sheetName);
+  if (!shLog) shLog = ensureProgramacaoLogSheet_(ss);
+
+  const headerRow = 1;
+  let hmap = mapHeaders_(shLog, headerRow);
+  let cPlanoLog = getHeaderColRequired_(hmap, ['PLANO', 'PLANOS', 'Plano']);
+  let cFaixaLog = getHeaderColOptional_(hmap, ['FAIXA']);
+  let cQtdLog = getHeaderColOptional_(hmap, ['QTD ENTREGAS', 'Qtd entregas', 'QUANTIDADE DE ENTREGAS', 'ENTREGAS']);
+  if (!cFaixaLog) {
+    inserirColunasLogProgramacao();
+    hmap = mapHeaders_(shLog, headerRow);
+    cFaixaLog = getHeaderColOptional_(hmap, ['FAIXA']);
+    cQtdLog = getHeaderColOptional_(hmap, ['QTD ENTREGAS', 'Qtd entregas', 'QUANTIDADE DE ENTREGAS', 'ENTREGAS']);
+    if (!cFaixaLog) throw new Error('Nao foi possivel inserir coluna FAIXA.');
+  }
+
+  // Obter tarefas ClickUp da lista alvo, filtrando por status 'EM ROTA'
+  const cfgProg = getClickUpProgramacaoConfig_();
+  const listIdPrimary = String((cfgProg && cfgProg.LIST_ID_CARDS) || CONFIG.CLICKUP.PROGRAMACAO.LIST_ID_CARDS || CONFIG.CLICKUP.LIST_ID_MOTORISTAS);
+  const listIdFromLink = '901314444197';
+  const candidateLists = [];
+  if (listIdPrimary) candidateLists.push(listIdPrimary);
+  if (listIdFromLink && candidateLists.indexOf(listIdFromLink) === -1) candidateLists.push(listIdFromLink);
+
+  let tasks = [];
+    for (let li = 0; li < candidateLists.length; li++) {
+    try {
+      // filtra por status 'EM ROTA' e também 'FINALIZADO'/'COMPLETO'
+      const fetched = fetchClickUpTasksByList_(candidateLists[li], { statuses: ['EM ROTA', 'FINALIZADO', 'COMPLETO'] });
+      if (Array.isArray(fetched) && fetched.length) {
+        tasks = fetched;
+        break;
+      }
+    } catch (e) {
+      appCodeLog_('[WARN] falha ao buscar lista ClickUp ' + candidateLists[li] + ': ' + String(e && e.message || e));
+    }
+  }
+  // se nao encontrou nada com filtro, tenta sem filtro como fallback
+  if (!tasks.length) {
+    for (let li = 0; li < candidateLists.length; li++) {
+      try {
+        const fetched = fetchClickUpTasksByList_(candidateLists[li], {});
+        if (Array.isArray(fetched) && fetched.length) { tasks = fetched; break; }
+      } catch (e) {}
+    }
+  }
+
+  const index = indexClickUpTasksByPlano_(tasks || []);
+
+  // Preparar leitura da aba Log_programação
+  const lastRowLog = shLog.getLastRow();
+  if (lastRowLog <= headerRow) return { ok: true, updated: 0 };
+  const rowsLog = shLog.getRange(headerRow + 1, 1, lastRowLog - headerRow, shLog.getLastColumn()).getValues();
+
+  const outFaixa = [];
+  const outQtd = [];
+  let updates = 0;
+  for (let i = 0; i < rowsLog.length; i++) {
+    const row = rowsLog[i] || [];
+    const planoRaw = String(row[cPlanoLog - 1] || '').trim();
+    let faixaVal = '';
+    let qtdVal = '';
+    if (planoRaw) {
+      // chave normalizada: usa dígitos e reduz para 10 primeiros quando necessário
+      let k = normalizePlanoDigitsKey_(planoRaw) || '';
+      if (/^\d+$/.test(k) && k.length > 10) k = k.slice(0, 10);
+
+      let found = null;
+      if (k && index && index.byPlanoKey && index.byPlanoKey[k]) found = index.byPlanoKey[k].task;
+      if (!found) {
+        // fallback por base do plano (parte antes do '-')
+        const base = getClickUpPlanoBaseProgramacao_(planoRaw);
+        if (base && index && index.byPlanoBase && index.byPlanoBase[base] && index.byPlanoBase[base].length) {
+          found = index.byPlanoBase[base][0];
+        }
+      }
+      if (!found) {
+        // Busca linear como último recurso: tenta casar por nome da task ou campo custom contendo o plano
+        const planoDigits = k;
+        const base = getClickUpPlanoBaseProgramacao_(planoRaw);
+        for (let tI = 0; tI < (tasks || []).length; tI++) {
+          const t = tasks[tI] || {};
+          const tname = String(t.name || '').trim();
+          const tnDigits = normalizePlanoDigitsKey_(tname) || '';
+          if (planoDigits && tnDigits && tnDigits.indexOf(planoDigits) === 0) { found = t; break; }
+          if (planoDigits && tname.indexOf(planoDigits) !== -1) { found = t; break; }
+          if (base && tname.indexOf(base + '-') === 0) { found = t; break; }
+          // checar custom fields do task por valor de plano
+          const tCfs = resolverCustomFieldsClickUp_(t) || {};
+          for (let cfk in tCfs) {
+            try {
+              const v = String(tCfs[cfk] || '').trim();
+              const vDigits = normalizePlanoDigitsKey_(v) || '';
+              if (planoDigits && vDigits && vDigits.indexOf(planoDigits) === 0) { found = t; break; }
+              if (planoDigits && v.indexOf(planoDigits) !== -1) { found = t; break; }
+            } catch (e) {}
+          }
+          if (found) break;
+        }
+      }
+
+      if (found) {
+        const cfs = resolverCustomFieldsClickUp_(found) || {};
+        // procura explicitamente por 'FAIXA KM (GM)' ou qualquer campo contendo 'FAIXA'
+        Object.keys(cfs).some(function(k){
+          const nk = normalizeCustomFieldKey_(k);
+          if (nk.indexOf('FAIXA') !== -1) { faixaVal = String(cfs[k] || '').trim(); return true; }
+          return false;
+        });
+        // procura por campo de entregas (varios nomes possiveis)
+        Object.keys(cfs).some(function(k){
+          const nk = normalizeCustomFieldKey_(k);
+          if (nk.indexOf('ENTREGAS') !== -1 || nk.indexOf('QTD') !== -1) { qtdVal = String(cfs[k] || '').trim(); return true; }
+          return false;
+        });
+        // fallback: extrair do nome da task apos o '-'
+        if (!faixaVal) {
+          const tn = String(found.name || '');
+          const m = tn.match(/-(.+)$/);
+          if (m && m[1]) faixaVal = m[1].trim();
+        }
+        // se nao encontrou qtd nas cfs, tentar extrair de task.name (digitos isolados)
+        if (!qtdVal) {
+          const tn2 = String(found.name || '');
+          const m2 = tn2.match(/\b(\d{1,3})\b/);
+          if (m2 && m2[1]) qtdVal = m2[1];
+        }
+      }
+    }
+    if (faixaVal) updates++;
+    outFaixa.push([faixaVal]);
+    outQtd.push([qtdVal]);
+  }
+  if (outFaixa.length) shLog.getRange(headerRow + 1, cFaixaLog, outFaixa.length, 1).setValues(outFaixa);
+  if (outQtd.length && cQtdLog) shLog.getRange(headerRow + 1, cQtdLog, outQtd.length, 1).setValues(outQtd);
+  return { ok: true, updated: updates, rows: outFaixa.length };
+}
+
+/**
+ * Cria um gatilho horário para `syncFaixaFromClickUpHourly` (a cada 1 hora).
+ */
+function createHourlyFaixaTrigger() {
+  // remove triggers existentes para evitar duplicatas
+  const fn = 'syncFaixaFromClickUpHourly';
+  const triggers = ScriptApp.getProjectTriggers() || [];
+  triggers.forEach(function(t){ if (t.getHandlerFunction && t.getHandlerFunction() === fn) ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger(fn).timeBased().everyHours(1).create();
+  return { ok: true };
+}
+
 
 function buildAttemicsSemPlanoRows_(options) {
   const opts = options || {};
