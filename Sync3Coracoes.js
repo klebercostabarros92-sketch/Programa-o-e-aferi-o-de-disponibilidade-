@@ -345,6 +345,7 @@ function enviarSolicitacaoInclusaoGM7() {
   // Ler toda a área de dados para evitar leituras repetidas
   const dataRange = sh.getRange(headerRow + 1, 1, Math.max(1, lastRow - headerRow), sh.getLastColumn());
   const data = dataRange.getValues();
+  const displayData = dataRange.getDisplayValues();
 
   const rowsToSend = [];
   for (let i = 0; i < data.length; i++) {
@@ -353,9 +354,17 @@ function enviarSolicitacaoInclusaoGM7() {
     if (checked === true || checked === 'TRUE' || checked === 'true') {
       const nome = String(row[nameCol - 1] || '').trim();
       const placa = String(row[placaCol - 1] || '').trim();
-      let perfil = String(row[perfilCol - 1] || '').trim();
-      // Normalizar perfil '3/4' para 'Médio 3/4' para evitar interpretação como data
-      if (/^3\s*\/\s*4$/i.test(perfil)) perfil = 'Médio 3/4';
+      // Usar o valor exibido na célula para evitar Date objects sendo convertidos para texto
+      const displayPerfil = String(displayData[i][perfilCol - 1] || '').trim();
+      let perfil = '';
+      if (/^3\s*\/\s*4$/i.test(displayPerfil)) {
+        perfil = '3/4';
+      } else if (displayPerfil) {
+        perfil = displayPerfil;
+      } else {
+        const raw = row[perfilCol - 1];
+        perfil = (raw instanceof Date) ? '' : String(raw || '').trim();
+      }
       rowsToSend.push({nome: nome, placa: placa, perfil: perfil, rowIndex: headerRow + 1 + i});
     }
   }
