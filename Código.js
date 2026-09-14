@@ -8653,22 +8653,6 @@ function sendAttemicsTextMessage_(payload, options) {
   const code = response.getResponseCode();
   const responseText = response.getContentText() || '';
 
-  // Registro na fila para histórico (opcional, mantendo o que já existia mas com status diferente)
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = getOrCreateFilaWhatsAppSheet_(ss);
-    sheet.appendRow([
-      formatDateTimeBR_(new Date()),
-      number,
-      message,
-      code === 200 ? 'ENVIADO_API' : 'ERRO_API',
-      code,
-      truncateText_(responseText, 200)
-    ]);
-  } catch (eLog) {
-    appCodeLog_('[ERROR] Falha ao logar na fila WhatsApp', { erro: eLog.message });
-  }
-
   return {
     ok: code === 200 || code === 201,
     httpStatus: code,
@@ -8876,12 +8860,12 @@ function buildAttemicsPreCheckSummary_(kind, rows, ctx) {
       pushSampleAttemics_(out.amostraBloqueados, row.plano + ' (falta 1a msg)', 6);
       continue;
     }
-    if (!previewOnly && kind === 'segunda' && hasAttemicsSegundaMesmaAgendaHoje_(planoPlacaKey, dateRef, row.agendaCarregamento, logState)) {
+    if (!previewOnly && !testMode && kind === 'segunda' && hasAttemicsSegundaMesmaAgendaHoje_(planoPlacaKey, dateRef, row.agendaCarregamento, logState)) {
       out.trava++;
       pushSampleAttemics_(out.amostraBloqueados, row.plano + ' (duplicidade agenda)', 6);
       continue;
     }
-    if (!previewOnly && kind !== 'segunda' && hasAttemicsLogForPlanoTipoDia_(logSheet, planoPlacaKey, tipoMensagem, dateRef, 'ENVIADO_OK', logState)) {
+    if (!previewOnly && !testMode && kind !== 'segunda' && hasAttemicsLogForPlanoTipoDia_(logSheet, planoPlacaKey, tipoMensagem, dateRef, 'ENVIADO_OK', logState)) {
       out.trava++;
       pushSampleAttemics_(out.amostraBloqueados, row.plano + ' (duplicidade)', 6);
       continue;
