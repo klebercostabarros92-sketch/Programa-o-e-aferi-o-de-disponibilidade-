@@ -368,7 +368,7 @@ function enviarSolicitacaoInclusaoGM7() {
   const hour = new Date().getHours();
   const saudacao = (hour < 12) ? 'Bom dia' : 'Boa tarde';
   const to = 'lucasdelamura@3coracoes.com.br,vitorfarias@3coracoes.com.br';
-  const cc = 'anaerica@3coracoes.com.br';
+  const cc = 'anaerica@3coracoes.com.br,carlos.peixoto@thxgroup.com.br,rodrigo.santos@thxgroup.com.br,cristiano.castilho@thxgroup.com.br';
 
   function escapeHtml(str) {
     if (!str) return '';
