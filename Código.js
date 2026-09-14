@@ -4103,22 +4103,13 @@ function ensureProgramacaoLogSheet_(ss) {
  */
 function getProgramacaoLogHeaders_() {
   return [
-    'DataHoraRegistro',
-    'DataProgramacao',
-    'DataSaida',
-    'DataCarregamento',
     'Plano',
-    'Complemento',
-    'Perfil',
-    'RegiaoZona',
     'Placa',
+    'Perfil',
+    'Zona',
+    'Data do carregamento',
     'Motorista',
-    'FaixaAgenda',
-    'ClickUpStatus',
-    'ClickUpTaskId',
-    'ClickUpUrl',
-    'RowProgramacao',
-    'HashDedupe',
+    'Quantidade de entregas',
   ];
 }
 
@@ -4129,52 +4120,25 @@ function getProgramacaoLogHeaders_() {
 function ensureProgramacaoLogSheet_(ss) {
   const sheetName = (CONFIG.PROGRAMACAO_LOG && CONFIG.PROGRAMACAO_LOG.SHEET_NAME) || 'Log_programa\u00e7\u00e3o';
   let sheet = findSheetCaseInsensitive_(ss, sheetName);
-  if (sheet) return sheet;
+  if (!sheet) sheet = ss.insertSheet(sheetName);
 
-  sheet = ss.insertSheet(sheetName);
   const headers = getProgramacaoLogHeaders_();
+  const maxCols = sheet.getMaxColumns();
+  if (maxCols < headers.length) sheet.insertColumnsAfter(maxCols, headers.length - maxCols);
+  ensureHeaders_(sheet, headers, 1);
+  if (sheet.getMaxColumns() > headers.length) sheet.deleteColumns(headers.length + 1, sheet.getMaxColumns() - headers.length);
 
-  // Cabeçalhos na linha 1
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-
-  // Formatação do cabeçalho
-  const headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange
-    .setFontWeight('bold')
-    .setBackground('#1a73e8')
-    .setFontColor('#ffffff')
-    .setHorizontalAlignment('center')
-    .setWrap(false);
-  sheet.setFrozenRows(1);
-  sheet.setRowHeight(1, 28);
-
-  // Larguras sugeridas para melhor leitura
-  const widths = {
-    DataHoraRegistro: 155,
-    DataProgramacao: 120,
-    DataSaida: 105,
-    DataCarregamento: 130,
-    Plano: 120,
-    Complemento: 140,
-    Perfil: 100,
-    RegiaoZona: 160,
-    Placa: 90,
-    Motorista: 160,
-    FaixaAgenda: 130,
-    ClickUpStatus: 115,
-    ClickUpTaskId: 115,
-    ClickUpUrl: 250,
-    RowProgramacao: 100,
-    HashDedupe: 200,
-  };
-  for (let i = 0; i < headers.length; i++) {
-    if (widths[headers[i]]) sheet.setColumnWidth(i + 1, widths[headers[i]]);
-  }
-
-  // Move a aba para o final
-  const totalSheets = ss.getSheets().length;
-  ss.setActiveSheet(sheet);
-  ss.moveActiveSheet(totalSheets);
+  try {
+    sheet.setFrozenRows(1);
+    sheet.setRowHeight(1, 28);
+    sheet.getRange(1, 1, 1, headers.length)
+      .setFontWeight('bold')
+      .setBackground('#1a73e8')
+      .setFontColor('#ffffff')
+      .setHorizontalAlignment('center')
+      .setWrap(false);
+    [120,100,110,120,150,170,150].forEach(function(width, i) { sheet.setColumnWidth(i + 1, width); });
+  } catch (e) {}
 
   return sheet;
 }
@@ -4187,69 +4151,51 @@ function setupProgramacaoLog() {
 
 function buildProgramacaoLogDedupeHash_(rowCtx) {
   const row = rowCtx || {};
-  const data = String(row.dataSaida || row.dataCarregamento || formatDateRefBR_(new Date())).trim();
   return [
-    data,
     row.plano || '',
     normalizePlate_(row.placa || ''),
-    row.faixaAgendaProgramacao || '',
+    row.perfil || '',
+    row.regiao || '',
+    row.dataCarregamento || '',
+    row.motorista || '',
+    row.entregas || '',
   ].map(function (v) { return normalizeHeader_(v); }).join('|');
 }
 
 function getProgramacaoLogExistingKeys_(sheet) {
-  const headers = getProgramacaoLogHeaders_();
   const lastRow = sheet.getLastRow();
-  const out = { byHash: {}, byTaskId: {} };
+  const out = { byHash: {} };
   if (lastRow < 2) return out;
-  const hashCol = headers.indexOf('HashDedupe') + 1;
-  const taskCol = headers.indexOf('ClickUpTaskId') + 1;
-  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getDisplayValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, getProgramacaoLogHeaders_().length).getDisplayValues();
   for (let i = 0; i < values.length; i++) {
-    const hash = String(values[i][hashCol - 1] || '').trim();
-    const taskId = String(values[i][taskCol - 1] || '').trim();
+    const hash = buildProgramacaoLogDedupeHash_({
+      plano: values[i][0], placa: values[i][1], perfil: values[i][2], regiao: values[i][3],
+      dataCarregamento: values[i][4], motorista: values[i][5], entregas: values[i][6],
+    });
     if (hash) out.byHash[hash] = true;
-    if (taskId) out.byTaskId[taskId] = true;
   }
   return out;
 }
 
 function maybeAppendProgramacaoLogFromClickUpCreation_(ss, rowCtx, meta) {
   const row = rowCtx || {};
-  const taskId = String((meta && meta.taskId) || '').trim();
   const hash = buildProgramacaoLogDedupeHash_(row);
-  if (!hash && !taskId) return false;
+  if (!hash) return false;
   const sheet = ensureProgramacaoLogSheet_(ss || SpreadsheetApp.getActiveSpreadsheet());
   const existing = getProgramacaoLogExistingKeys_(sheet);
-  if ((hash && existing.byHash[hash]) || (taskId && existing.byTaskId[taskId])) return false;
+  if (existing.byHash[hash]) return false;
 
-  const dataProgramacao = String(row.dataSaida || row.dataCarregamento || formatDateRefBR_(new Date())).trim();
   const logRow = {
-    DataHoraRegistro: formatDateTimeBR_(new Date()),
-    DataProgramacao: dataProgramacao,
-    DataSaida: row.dataSaida || '',
-    DataCarregamento: row.dataCarregamento || '',
-    Plano: row.plano || '',
-    Complemento: row.complemento || '',
-    Perfil: row.perfil || '',
-    RegiaoZona: row.regiao || '',
-    Placa: row.placa || '',
-    Motorista: row.motorista || '',
-    FaixaAgenda: row.faixaAgendaProgramacao || '',
-    ClickUpStatus: String((meta && meta.clickupStatus) || '').trim(),
-    ClickUpTaskId: taskId,
-    ClickUpUrl: String((meta && meta.taskUrl) || '').trim(),
-    RowProgramacao: row.rowProgramacao || '',
-    HashDedupe: hash,
+    'Plano': row.plano || '',
+    'Placa': row.placa || '',
+    'Perfil': row.perfil || '',
+    'Zona': row.regiao || '',
+    'Data do carregamento': row.dataCarregamento || '',
+    'Motorista': row.motorista || '',
+    'Quantidade de entregas': row.entregas || '',
   };
   const headers = getProgramacaoLogHeaders_();
-  sheet.appendRow(headers.map(function (h) {
-    return Object.prototype.hasOwnProperty.call(logRow, h) ? logRow[h] : '';
-  }));
-  try {
-    const r = sheet.getLastRow();
-    sheet.getRange(r, 1, 1, headers.length).setWrap(false);
-    sheet.setRowHeight(r, 21);
-  } catch (e) {}
+  sheet.appendRow(headers.map(function (h) { return logRow[h] || ''; }));
   return true;
 }
 
