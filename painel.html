@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THX Group — Painel Operacional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ─── RESET & BASE ─────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue:       #1a56a7;
+  --blue-dark:  #133e80;
+  --blue-light: #2d6cbf;
+  --blue-pale:  #e8f0fb;
+  --blue-mid:   #c6daff;
+  --accent:     #0e7afe;
+  --green:      #16a34a;
+  --green-bg:   #dcfce7;
+  --yellow:     #ca8a04;
+  --yellow-bg:  #fef9c3;
+  --orange:     #c2410c;
+  --orange-bg:  #ffedd5;
+  --red:        #dc2626;
+  --red-bg:     #fee2e2;
+  --gray:       #6b7280;
+  --gray-bg:    #f3f4f6;
+  --bg:         #f0f2f5;
+  --sidebar-bg: #ffffff;
+  --card-bg:    #ffffff;
+  --border:     #d1d5db;
+  --border2:    #e5e7eb;
+  --text:       #111827;
+  --text-dim:   #374151;
+  --text-muted: #6b7280;
+  --sidebar-w:  210px;
+  --header-h:   64px;
+  --row-hover:  #f0f6ff;
+  --row-stripe: #f9fafb;
+}
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ─── HEADER ────────────────────────────────────── */
+.header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--header-h);
+  background:
+    radial-gradient(ellipse 60% 120% at 0% 50%, #0a2a5e 0%, transparent 70%),
+    radial-gradient(ellipse 40% 100% at 100% 50%, #072040 0%, transparent 70%),
+    #04111f;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 0;
+  z-index: 200;
+  box-shadow: 0 2px 12px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+
+/* rede de pontos animada no fundo */
+.header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(100,160,255,.18) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+}
+
+/* linha divisória decorativa */
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #1e6fd9 30%, #3b9aff 50%, #1e6fd9 70%, transparent 100%);
+}
+
+/* LOGO AREA */
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  padding-right: 20px;
+  border-right: 1px solid rgba(255,255,255,.12);
+  margin-right: 16px;
+  position: relative;
+  z-index: 1;
+}
+.brand-thx {
+  font-size: 28px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -1px;
+  line-height: 1;
+  font-style: italic;
+  text-shadow: 0 0 20px rgba(59,154,255,.4);
+}
+.brand-arrow {
+  font-size: 20px;
+  color: #3b9aff;
+  margin: 0 2px;
+  font-style: normal;
+  font-weight: 900;
+}
+.brand-log {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2eeff;
+  letter-spacing: 1px;
+  line-height: 1;
+  display: flex;
+  flex-direction: column;
+}
+.brand-log .log-main { font-size: 18px; font-weight: 700; color: #fff; }
+.brand-log .log-sub  { font-size: 9px; font-weight: 600; letter-spacing: 3px; color: #7ab3ff; text-transform: uppercase; margin-top: -1px; }
+
+/* QUOTE */
+.header-quote {
+  flex: 1;
+  padding: 0 16px;
+  position: relative;
+  z-index: 1;
+}
+.header-quote .q-text {
+  font-size: 11px;
+  color: rgba(255,255,255,.7);
+  font-style: italic;
+  line-height: 1.4;
+}
+.header-quote .q-text strong { color: #7ab3ff; font-style: normal; font-weight: 700; }
+
+/* GPTW BADGE */
+.gptw-badge {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 6px;
+  padding: 4px 10px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  margin-right: 14px;
+}
+.gptw-badge .gptw-top { font-size: 7px; font-weight: 700; color: rgba(255,255,255,.8); letter-spacing: 1px; text-transform: uppercase; }
+.gptw-badge .gptw-main { font-size: 9px; font-weight: 900; color: #fff; letter-spacing: .5px; white-space: nowrap; }
+.gptw-badge .gptw-sub { font-size: 7px; color: rgba(255,255,255,.75); letter-spacing: .5px; }
+
+/* RIGHT CONTROLS */
+.header-sep { width: 1px; height: 32px; background: rgba(255,255,255,.15); margin: 0 12px; }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.header-pill {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,.85);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.header-pill.live::before { content: '● '; color: #4ade80; animation: blink 1.4s infinite; }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+.header-breadcrumb {
+  font-size: 11px;
+  color: rgba(255,255,255,.6);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.header-breadcrumb .active-page { color: #7ab3ff; font-weight: 600; }
+.header-user {
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,.9);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.btn-refresh {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 4px;
+  color: rgba(255,255,255,.85);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: 'Inter',sans-serif;
+  padding: 4px 10px;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.btn-refresh:hover { background: rgba(255,255,255,.18); }
+
+/* ─── LAYOUT ────────────────────────────────────── */
+.layout {
+  display: flex;
+  margin-top: var(--header-h);
+  min-height: calc(100vh - var(--header-h));
+}
+
+/* ─── SIDEBAR ───────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  bottom: 0;
+  overflow-y: auto;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-section { padding: 12px 0 4px; }
+.sidebar-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text-muted);
+  padding: 0 14px 4px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all .12s;
+  user-select: none;
+  line-height: 1.3;
+}
+.nav-item:hover { background: var(--blue-pale); color: var(--blue); }
+.nav-item.active {
+  background: var(--blue-pale);
+  color: var(--blue);
+  border-left-color: var(--blue);
+  font-weight: 600;
+}
+.nav-item .icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.sidebar-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border2);
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.clock-display {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--blue);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── MAIN ──────────────────────────────────────── */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  padding: 16px;
+  min-height: calc(100vh - var(--header-h));
+}
+
+/* ─── PAGE HEADER ───────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--blue);
+}
+.page-header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--blue-dark);
+}
+.page-header p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.page-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ─── SECTION ───────────────────────────────────── */
+.section { display: none; }
+.section.active { display: block; }
+
+/* ─── KPI STRIP ─────────────────────────────────── */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.kpi-box {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-box::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  border-radius: 6px 0 0 6px;
+}
+.kpi-box.blue::after { background: var(--blue); }
+.kpi-box.green::after { background: var(--green); }
+.kpi-box.orange::after { background: #ea580c; }
+.kpi-box.teal::after { background: #0891b2; }
+.kpi-box.purple::after { background: #7c3aed; }
+.kpi-label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: .4px; }
+.kpi-value { font-size: 26px; font-weight: 700; color: var(--text); margin: 4px 0 2px; }
+.kpi-box.blue .kpi-value { color: var(--blue); }
+.kpi-box.green .kpi-value { color: var(--green); }
+.kpi-box.orange .kpi-value { color: #ea580c; }
+.kpi-box.teal .kpi-value { color: #0891b2; }
+.kpi-sub { font-size: 11px; color: var(--text-muted); }
+
+/* ─── CARD ──────────────────────────────────────── */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--blue-pale);
+  border-bottom: 1px solid var(--border);
+}
+.card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue-dark);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.card-meta { font-size: 11px; color: var(--text-muted); }
+
+/* ─── TABLE ─────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th {
+  background: #eef2f9;
+  color: var(--blue-dark);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 2px solid var(--blue-mid);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border2);
+  color: var(--text-dim);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+tbody tr:nth-child(even) td { background: var(--row-stripe); }
+tbody tr:hover td { background: var(--row-hover) !important; }
+tbody tr:last-child td { border-bottom: none; }
+tfoot td {
+  padding: 7px 10px;
+  background: #eef2f9;
+  font-weight: 700;
+  color: var(--blue-dark);
+  border-top: 2px solid var(--blue-mid);
+  font-size: 12px;
+}
+.tbl-center td { text-align: center; }
+
+/* ─── BADGES / STATUS LABELS ────────────────────── */
+.lbl {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.lbl-green  { background: var(--green-bg);  color: var(--green); }
+.lbl-yellow { background: var(--yellow-bg); color: var(--yellow); }
+.lbl-orange { background: var(--orange-bg); color: var(--orange); }
+.lbl-red    { background: var(--red-bg);    color: var(--red); }
+.lbl-blue   { background: var(--blue-pale); color: var(--blue); }
+.lbl-gray   { background: var(--gray-bg);   color: var(--gray); }
+
+/* ─── FAROL DOT ─────────────────────────────────── */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.dot-green  { background: var(--green); }
+.dot-yellow { background: #eab308; }
+.dot-orange { background: #f97316; }
+.dot-red    { background: var(--red); }
+.dot-gray   { background: var(--gray); }
+
+/* ─── PROGRESS BAR ──────────────────────────────── */
+.pbar { display: inline-block; width: 70px; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; vertical-align: middle; }
+.pbar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+
+/* ─── TIPO LABEL ────────────────────────────────── */
+.tipo { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+.tipo-FIO { background: #ede9fe; color: #6d28d9; }
+.tipo-HRV { background: #e0f2fe; color: #0369a1; }
+.tipo-VUC { background: #ccfbf1; color: #0f766e; }
+.tipo-TOC { background: #ffedd5; color: #c2410c; }
+.tipo-CAV { background: #fee2e2; color: #dc2626; }
+
+/* ─── FILTERS ROW ───────────────────────────────── */
+.filters-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.fi {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  padding: 5px 9px;
+  outline: none;
+  transition: border-color .15s;
+}
+.fi:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(26,86,167,.12); }
+.fi-search { min-width: 200px; }
+.fi-select { cursor: pointer; }
+.fi-select option { background: #fff; }
+.btn-primary {
+  background: var(--blue);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 14px;
+  transition: background .15s;
+}
+.btn-primary:hover { background: var(--blue-dark); }
+.btn-outline {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  padding: 5px 12px;
+  transition: all .15s;
+}
+.btn-outline:hover { border-color: var(--blue); color: var(--blue); }
+.btn-send {
+  background: #16a34a;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  transition: background .15s;
+}
+.btn-send:hover { background: #15803d; }
+.filter-count { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+
+/* ─── GRID ──────────────────────────────────────── */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.g-wide { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; margin-bottom: 12px; }
+.mb10 { margin-bottom: 10px; }
+.mb14 { margin-bottom: 14px; }
+
+/* ─── CHART ─────────────────────────────────────── */
+.chart-area {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+.donut-wrap { position: relative; width: 200px; height: 200px; }
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.donut-center .big { font-size: 28px; font-weight: 700; color: var(--blue-dark); }
+.donut-center .sm  { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+
+/* ─── TIPO SUMMARY BOXES ────────────────────────── */
+.tipo-boxes { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 12px; }
+.tipo-box {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  border-top: 3px solid transparent;
+}
+.tipo-box .t-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+.tipo-box .t-num  { font-size: 22px; font-weight: 700; }
+.tipo-box .t-sub  { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+/* ─── TURNO BLOCK ───────────────────────────────── */
+.turno-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.turno-card-head {
+  background: var(--blue-pale);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.turno-card-head h3 { font-size: 12px; font-weight: 700; color: var(--blue-dark); text-transform: uppercase; letter-spacing: .4px; }
+.turno-card-body { padding: 0; }
+.turno-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border2);
+  font-size: 12px;
+}
+.turno-row:last-child { border-bottom: none; }
+.turno-row .tl { color: var(--text-muted); }
+.turno-row .tv { font-weight: 600; color: var(--text); }
+.turno-footer { padding: 10px 12px; border-top: 1px solid var(--border2); background: var(--gray-bg); }
+
+/* ─── LINK ──────────────────────────────────────── */
+a.tbl-link { color: var(--blue); text-decoration: none; font-size: 11px; font-weight: 600; }
+a.tbl-link:hover { text-decoration: underline; }
+
+/* ─── EMPTY ─────────────────────────────────────── */
+.empty-row td { text-align: center; color: var(--text-muted); padding: 24px; font-size: 12px; }
+
+/* ─── SCROLLBAR ─────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--border2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue); }
+
+/* ─── TOAST ─────────────────────────────────────── */
+.toast-wrap { position: fixed; bottom: 16px; right: 16px; z-index: 999; display: flex; flex-direction: column; gap: 6px; }
+.toast {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--green);
+  border-radius: 5px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text);
+  animation: toastIn .2s ease;
+  max-width: 280px;
+}
+.toast.err { border-left-color: var(--red); }
+@keyframes toastIn { from{transform:translateX(110%);opacity:0} to{transform:none;opacity:1} }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <!-- LOGO -->
+  <div class="header-brand">
+    <span class="brand-thx">THX</span>
+    <span class="brand-arrow">➤</span>
+    <div class="brand-log">
+      <span class="log-main">LOG</span>
+      <span class="log-sub">TECH</span>
+    </div>
+  </div>
+
+  <!-- QUOTE -->
+  <div class="header-quote">
+    <div class="q-text">
+      "Se não estivermos <strong>Totalmente diferentes</strong> em 6 meses,<br>
+      em 2 anos estaremos fora do mercado."
+    </div>
+  </div>
+
+  <!-- GPTW -->
+  <div class="gptw-badge">
+    <div class="gptw-top">Great Place</div>
+    <div class="gptw-main">TO WORK</div>
+    <div class="gptw-sub">Certificada</div>
+  </div>
+
+  <div class="header-sep"></div>
+
+  <!-- CONTROLES -->
+  <div class="header-right">
+    <div class="header-breadcrumb">
+      <span>Painel</span> <span>›</span>
+      <span class="active-page" id="hdr-breadcrumb">Dashboard</span>
+    </div>
+    <div class="header-sep" style="height:20px"></div>
+    <div class="header-pill" id="hdr-date">--/--/----</div>
+    <div class="header-pill live">Online</div>
+    <div class="header-user">👤 Kleber Costa | GRU</div>
+    <button class="btn-refresh" onclick="recarregarDados()">↻ Atualizar</button>
+  </div>
+</header>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Visão Geral</div>
+      <div class="nav-item active" data-section="dashboard">
+        <span class="icon">📊</span> Dashboard
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Operação</div>
+      <div class="nav-item" data-section="programacao">
+        <span class="icon">📋</span> Programação
+      </div>
+      <div class="nav-item" data-section="disponibilidade">
+        <span class="icon">🚛</span> Disponibilidade
+      </div>
+      <div class="nav-item" data-section="jornada">
+        <span class="icon">⏱️</span> Jornada Interna
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Relatórios</div>
+      <div class="nav-item" data-section="passagem">
+        <span class="icon">🔄</span> Passagem de Turno
+      </div>
+      <div class="nav-item" data-section="xml">
+        <span class="icon">📄</span> XML / NFs
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div style="color:var(--text-muted)">GUARULHOS · 3 Corações</div>
+      <div class="clock-display" id="sidebar-clock">--:--:--</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- DASHBOARD                                 -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="section active" id="section-dashboard">
+      <div class="page-header">
+        <div>
+          <h1>Flash Last Mile · Dashboard</h1>
+          <p>Disponibilidade e utilização de veículos · referência <span id="dash-ref">--/--/----</span></p>
+        </div>
+        <div class="page-actions">
+          <span style="font-size:11px;color:var(--text-muted)">Atualizado: <span id="dash-updated">--:--</span></span>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-strip">
+        <div class="kpi-box blue">
+          <div class="kpi-label">Total Disponível</div>
+          <div class="kpi-value" id="kpi-disp">0</div>
+          <div class="kpi-sub">veículos no corte do dia</div>
+        </div>
+        <div class="kpi-box green">
+          <div class="kpi-label">Total Utilizado</div>
+          <div class="kpi-value" id="kpi-util">0</div>
+          <div class="kpi-sub">programados hoje</div>
+        </div>
+        <div class="kpi-box orange">
+          <div class="kpi-label">% Utilização</div>
+          <div class="kpi-value" id="kpi-pct">—</div>
+          <div class="kpi-sub" id="kpi-farol">—</div>
+        </div>
+        <div class="kpi-box teal">
+          <div class="kpi-label">2º Corte</div>
+          <div class="kpi-value" id="kpi-corte">0</div>
+          <div class="kpi-sub">ainda disponíveis</div>
+        </div>
+      </div>
+
+      <!-- Main grid -->
+      <div class="g-wide">
+        <!-- Left: 2 tables -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Disponibilidade por Tipo</span>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Tipo</th><th>Disponível</th><th>% Meta</th><th style="width:90px">Barra</th><th>% Part.</th></tr></thead>
+                <tbody id="tb-disp-tipo"></tbody>
+                <tfoot id="tf-disp-tipo"></tfoot>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Utilização por Tipo</span>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Tipo</th><th>Utilizado</th><th>2º Corte</th><th>% Disp</th><th style="width:90px">Barra</th><th>Farol</th></tr></thead>
+                <tbody id="tb-util-tipo"></tbody>
+                <tfoot id="tf-util-tipo"></tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- Right: Donut -->
+        <div class="card" style="display:flex;flex-direction:column;">
+          <div class="card-header">
+            <span class="card-title">Distribuição da Frota</span>
+          </div>
+          <div class="chart-area" style="flex:1;">
+            <div class="donut-wrap">
+              <canvas id="donutChart"></canvas>
+              <div class="donut-center">
+                <span class="big" id="donut-num">0</span>
+                <span class="sm">disponível</span>
+              </div>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table style="font-size:11px;">
+              <thead><tr><th>Tipo</th><th>Qtd</th><th>% Part.</th><th>% Util.</th><th>Farol</th></tr></thead>
+              <tbody id="tb-legend"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- PROGRAMAÇÃO                               -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="section" id="section-programacao">
+      <div class="page-header">
+        <div>
+          <h1>Programação · Planos do Dia</h1>
+          <p>Rotas e planos de entrega · GreenMile · WhatsApp · ClickUp · XML</p>
+        </div>
+      </div>
+      <div class="filters-row">
+        <input class="fi fi-search" id="p-search" type="text" placeholder="Buscar placa, motorista, plano...">
+        <select class="fi fi-select" id="p-tipo">
+          <option value="">Tipo: Todos</option>
+          <option>FIORINO</option><option>HR / VAN</option><option>VUC</option><option>TOCO</option><option>CAVALO</option>
+        </select>
+        <select class="fi fi-select" id="p-status">
+          <option value="">Status: Todos</option>
+          <option>dados encontrados</option><option>mover para o mapa</option><option>em andamento</option><option>aguardando</option><option>cancelado</option>
+        </select>
+        <select class="fi fi-select" id="p-gm">
+          <option value="">GreenMile: Todos</option>
+          <option value="Sincronizado">Sincronizado</option><option value="Pendente">Pendente</option><option value="Erro">Erro</option>
+        </select>
+        <select class="fi fi-select" id="p-xml">
+          <option value="">XML: Todos</option>
+          <option value="OK">OK</option><option value="Aguard">Aguardando</option><option value="Falt">Faltante</option>
+        </select>
+        <button class="btn-outline" onclick="limparProg()">✕ Limpar</button>
+        <span class="filter-count" id="p-count">0 registros</span>
+      </div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Plano</th><th>Tipo</th><th>Data Saída</th><th>Data Carreg.</th>
+                <th>Placa</th><th>Motorista</th>
+                <th>GreenMile</th><th>WhatsApp</th><th>ClickUp Status</th><th>XML</th>
+                <th style="text-align:right">Valor NF</th><th>Link</th>
+              </tr>
+            </thead>
+            <tbody id="tb-prog"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- DISPONIBILIDADE                           -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="section" id="section-disponibilidade">
+      <div class="page-header">
+        <div>
+          <h1>Disponibilidade · Frota</h1>
+          <p>Veículos disponíveis, programados e indisponíveis por tipo</p>
+        </div>
+      </div>
+      <div class="tipo-boxes" id="tipo-boxes"></div>
+      <div class="filters-row">
+        <input class="fi fi-search" id="d-search" type="text" placeholder="Buscar placa ou motorista...">
+        <select class="fi fi-select" id="d-tipo">
+          <option value="">Tipo: Todos</option>
+          <option>FIORINO</option><option>HR / VAN</option><option>VUC</option><option>TOCO</option><option>CAVALO</option>
+        </select>
+        <select class="fi fi-select" id="d-status">
+          <option value="">Status: Todos</option>
+          <option>Disponível</option><option>Programado</option><option>Indisponível</option>
+        </select>
+        <button class="btn-outline" onclick="limparDisp()">✕ Limpar</button>
+        <span class="filter-count" id="d-count">0 registros</span>
+      </div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Data</th><th>Placa</th><th>Motorista</th><th>Tipo</th><th>Status</th><th>Contato</th></tr>
+            </thead>
+            <tbody id="tb-disp"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- JORNADA INTERNA                           -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="section" id="section-jornada">
+      <div class="page-header">
+        <div>
+          <h1>Jornada Interna · CD Guarulhos</h1>
+          <p>Controle de chegada, carregamento e saída do CD · <span id="jorn-ref">--/--/----</span></p>
+        </div>
+      </div>
+      <div class="kpi-strip">
+        <div class="kpi-box green">
+          <div class="kpi-label">Carregados / Saíram</div>
+          <div class="kpi-value" id="j-saiu">0</div>
+          <div class="kpi-sub">liberados do CD</div>
+        </div>
+        <div class="kpi-box orange">
+          <div class="kpi-label">Em Carregamento</div>
+          <div class="kpi-value" id="j-carr">0</div>
+          <div class="kpi-sub">no CD agora</div>
+        </div>
+        <div class="kpi-box blue">
+          <div class="kpi-label">Não Iniciado</div>
+          <div class="kpi-value" id="j-naoinic">0</div>
+          <div class="kpi-sub">aguardando chegada</div>
+        </div>
+        <div class="kpi-box teal">
+          <div class="kpi-label">Tempo Médio CD</div>
+          <div class="kpi-value" id="j-media">—</div>
+          <div class="kpi-sub">média das jornadas</div>
+        </div>
+      </div>
+      <div class="filters-row">
+        <input class="fi fi-search" id="j-search" type="text" placeholder="Buscar placa, motorista ou plano...">
+        <select class="fi fi-select" id="j-status">
+          <option value="">Status: Todos</option>
+          <option>Carregado / Saiu</option><option>Em Carregamento</option><option>Não Iniciado</option>
+        </select>
+        <button class="btn-outline" onclick="limparJornada()">✕ Limpar</button>
+      </div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Plano</th><th>Placa</th><th>Motorista</th><th>Tipo</th><th>Chegada CD</th><th>Saída CD</th><th>Duração</th><th>Classificação</th><th>Status</th></tr>
+            </thead>
+            <tbody id="tb-jorn"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- PASSAGEM DE TURNO                         -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="section" id="section-passagem">
+      <div class="page-header">
+        <div>
+          <h1>Passagem de Turno</h1>
+          <p>Resumo consolidado para envio ao Google Chat</p>
+        </div>
+      </div>
+      <div class="g3">
+        <div class="turno-card">
+          <div class="turno-card-head">
+            <h3>📦 Programação</h3>
+            <span id="turno-hora-prog" style="font-size:11px;color:var(--text-muted)"></span>
+          </div>
+          <div class="turno-card-body" id="tc-prog"></div>
+          <div class="turno-footer">
+            <button class="btn-send" onclick="enviarTurno('programação')">💬 Enviar ao Google Chat</button>
+          </div>
+        </div>
+        <div class="turno-card">
+          <div class="turno-card-head">
+            <h3>🚛 Disponibilidade</h3>
+            <span id="turno-hora-disp" style="font-size:11px;color:var(--text-muted)"></span>
+          </div>
+          <div class="turno-card-body" id="tc-disp"></div>
+          <div class="turno-footer">
+            <button class="btn-send" onclick="enviarTurno('disponibilidade')">💬 Enviar ao Google Chat</button>
+          </div>
+        </div>
+        <div class="turno-card">
+          <div class="turno-card-head">
+            <h3>⏱️ Jornada Interna</h3>
+            <span id="turno-hora-jorn" style="font-size:11px;color:var(--text-muted)"></span>
+          </div>
+          <div class="turno-card-body" id="tc-jorn"></div>
+          <div class="turno-footer">
+            <button class="btn-send" onclick="enviarTurno('jornada')">💬 Enviar ao Google Chat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- XML / NFs                                 -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="section" id="section-xml">
+      <div class="page-header">
+        <div>
+          <h1>XML / Notas Fiscais</h1>
+          <p>Recebimento e vinculação de XMLs aos planos de entrega</p>
+        </div>
+      </div>
+      <div class="kpi-strip">
+        <div class="kpi-box green">
+          <div class="kpi-label">NFs Recebidas</div>
+          <div class="kpi-value" id="x-rec">0</div>
+          <div class="kpi-sub">processadas hoje</div>
+        </div>
+        <div class="kpi-box orange">
+          <div class="kpi-label">NFs Faltantes</div>
+          <div class="kpi-value" id="x-falt">0</div>
+          <div class="kpi-sub">não localizadas</div>
+        </div>
+        <div class="kpi-box blue">
+          <div class="kpi-label">Planos com XML</div>
+          <div class="kpi-value" id="x-planos">0</div>
+          <div class="kpi-sub">vinculados</div>
+        </div>
+        <div class="kpi-box teal">
+          <div class="kpi-label">Valor Total</div>
+          <div class="kpi-value" id="x-valor">R$ 0</div>
+          <div class="kpi-sub">soma das notas</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">NFs por Plano</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Plano</th><th>Placa</th><th>Motorista</th><th>XML Status</th><th>NFs Receb.</th><th>NFs Falt.</th><th>Último Rec.</th><th style="text-align:right">Valor</th></tr>
+            </thead>
+            <tbody id="tb-xml"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- TOAST -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// DADOS DE EXEMPLO — substitua por chamada à API/Sheets
+// ═══════════════════════════════════════════════════════════
+let HOJE = new Date();
+let DATA_REF = HOJE.toLocaleDateString('pt-BR');
+
+// ═══════════════════════════════════════════════════════════
+// INTEGRAÇÃO GOOGLE APPS SCRIPT
+// ═══════════════════════════════════════════════════════════
+const IS_GAS = typeof google !== 'undefined' && typeof google.script !== 'undefined';
+let _carregando = false;
+
+const TIPOS = ['FIORINO', 'HR / VAN', 'VUC', 'TOCO', 'CAVALO'];
+const TIPO_COLORS = { 'FIORINO':'#7c3aed','HR / VAN':'#0369a1','VUC':'#0f766e','TOCO':'#c2410c','CAVALO':'#dc2626' };
+const META = { 'FIORINO':5,'HR / VAN':5,'VUC':6,'TOCO':5,'CAVALO':2 };
+
+let DISP = [
+  {data:DATA_REF,placa:'MTH8367',motorista:'ROBERTSON PLATINI FERNANDES ALVES',perfil:'TOCO',    status:'Programado',   contato:'11987654321'},
+  {data:DATA_REF,placa:'UDS1B62',motorista:'THIAGO SOUZA CAMPOS',              perfil:'VUC',     status:'Disponível',   contato:'11976543210'},
+  {data:DATA_REF,placa:'DWO4E62',motorista:'MARCOS DE JESUS ARAUJO',           perfil:'VUC',     status:'Programado',   contato:'11965432109'},
+  {data:DATA_REF,placa:'QWV0C53',motorista:'GILLIARD ATAIDE COSTA',            perfil:'HR / VAN',status:'Disponível',   contato:'11954321098'},
+  {data:DATA_REF,placa:'EFW8E65',motorista:'JOSE IVANILSON DA SILVA JUNIOR',   perfil:'FIORINO', status:'Disponível',   contato:'11943210987'},
+  {data:DATA_REF,placa:'DXQ9102',motorista:'VANDERLIM PEREIRA',                perfil:'TOCO',    status:'Programado',   contato:'11932109876'},
+  {data:DATA_REF,placa:'EWD9I23',motorista:'MARCELO REY PARRADO',              perfil:'VUC',     status:'Disponível',   contato:'11921098765'},
+  {data:DATA_REF,placa:'EBJ0F31',motorista:'CLEBER MOREIRA DA MOTA',           perfil:'HR / VAN',status:'Indisponível', contato:'11910987654'},
+  {data:DATA_REF,placa:'QQJ8H82',motorista:'VALCSON DA SILVA GOMES',           perfil:'FIORINO', status:'Disponível',   contato:'11909876543'},
+  {data:DATA_REF,placa:'DYF1I02',motorista:'ABNER DE BRITO AMARAL',            perfil:'VUC',     status:'Programado',   contato:'11898765432'},
+  {data:DATA_REF,placa:'QQS2G85',motorista:'CLAUDIO LUCIANO BARBOSA SILVA',    perfil:'CAVALO',  status:'Disponível',   contato:'11887654321'},
+  {data:DATA_REF,placa:'DPG6I18',motorista:'KAUAN SOUZA DE LIMA',              perfil:'FIORINO', status:'Disponível',   contato:'11876543210'},
+  {data:DATA_REF,placa:'FCT8E25',motorista:'MATHEUS BEZERRA NEVES RAMOS',      perfil:'HR / VAN',status:'Disponível',   contato:'11865432109'},
+  {data:DATA_REF,placa:'MHO8I15',motorista:'JOSE CARLOS BRUSCHI',              perfil:'VUC',     status:'Indisponível', contato:'11854321098'},
+  {data:DATA_REF,placa:'IGV2649',motorista:'MARCOS DE LIMA FERREIRA',          perfil:'CAVALO',  status:'Programado',   contato:'11843210987'},
+  {data:DATA_REF,placa:'AWU4E51',motorista:'CLAUDIA DE JESUS MOCO',            perfil:'FIORINO', status:'Disponível',   contato:'11832109876'},
+  {data:DATA_REF,placa:'IGB4212',motorista:'GERALDO CLARET WIGGERS',           perfil:'TOCO',    status:'Disponível',   contato:'11821098765'},
+  {data:DATA_REF,placa:'CDR2J24',motorista:'JOAO PAULO BENTO RANGEL',          perfil:'HR / VAN',status:'Disponível',   contato:'11810987654'},
+  {data:DATA_REF,placa:'DKI5D01',motorista:'FABIANO ALVES DA SILVA',           perfil:'VUC',     status:'Programado',   contato:'11809876543'},
+  {data:DATA_REF,placa:'EKR7801',motorista:'EDSON MAY XAVIER',                 perfil:'TOCO',    status:'Disponível',   contato:'11798765432'},
+];
+
+let PROG = [
+  {plano:'6103120853-1',perfil:'TOCO',   dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'MTH8367',motorista:'ROBERTSON PLATINI',  gm:'Sincronizado',wa:'Enviado',  cu:'dados encontrados',xml:'OK',    valor:154496.00,url:'https://app.clickup.com/t/86ahtztq6'},
+  {plano:'6103137620-1',perfil:'VUC',    dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'DWO4E62',motorista:'MARCOS DE JESUS',     gm:'Sincronizado',wa:'Enviado',  cu:'mover para o mapa', xml:'Aguard',valor:20241.46, url:'https://app.clickup.com/t/86ahr5dx9'},
+  {plano:'6103135585-1',perfil:'VUC',    dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'DXQ9102',motorista:'VANDERLIM PEREIRA',   gm:'Pendente',    wa:'Enviado',  cu:'em andamento',       xml:'OK',    valor:53619.30, url:'https://app.clickup.com/t/86ah494m7'},
+  {plano:'6103108981-1',perfil:'HR / VAN',dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'DYF1I02',motorista:'ABNER DE BRITO',    gm:'Sincronizado',wa:'Pendente', cu:'dados encontrados',  xml:'OK',    valor:21941.44, url:'https://app.clickup.com/t/86ah0k2ye'},
+  {plano:'6103083933-1',perfil:'FIORINO',dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'EFW8E65',motorista:'JOSE IVANILSON',     gm:'Erro',        wa:'Enviado',  cu:'aguardando',          xml:'Falt',  valor:4871.96,  url:'https://app.clickup.com/t/86ah49ac4'},
+  {plano:'6103082632-2',perfil:'CAVALO', dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'IGV2649',motorista:'MARCOS DE LIMA',      gm:'Sincronizado',wa:'Enviado',  cu:'dados encontrados',  xml:'OK',    valor:113863.60,url:'https://app.clickup.com/t/86agearpb'},
+  {plano:'6103084282-1',perfil:'CAVALO', dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'QQS2G85',motorista:'CLAUDIO BARBOSA',    gm:'Pendente',    wa:'Pendente', cu:'mover para o mapa',  xml:'Aguard',valor:385.00,   url:'https://app.clickup.com/t/86ah3wu0g'},
+  {plano:'6103039732-1',perfil:'VUC',    dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'DKI5D01',motorista:'FABIANO ALVES',      gm:'Sincronizado',wa:'Enviado',  cu:'dados encontrados',  xml:'OK',    valor:20965.11, url:'https://app.clickup.com/t/86agacr2v'},
+  {plano:'6103036437-1',perfil:'TOCO',   dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'IGB4212',motorista:'GERALDO WIGGERS',    gm:'Sincronizado',wa:'Falhou',   cu:'em andamento',        xml:'OK',    valor:51062.80, url:'https://app.clickup.com/t/86agacqa7'},
+  {plano:'6103075579-1',perfil:'FIORINO',dataSaida:DATA_REF,dataCarreg:DATA_REF,placa:'QQJ8H82',motorista:'VALCSON DA SILVA',   gm:'Pendente',    wa:'Pendente', cu:'aguardando',          xml:'Falt',  valor:8881.42,  url:'https://app.clickup.com/t/86ah0k34g'},
+];
+
+let JORN = [
+  {plano:'6103120853-1',placa:'MTH8367',motorista:'ROBERTSON PLATINI', perfil:'TOCO',   chegada:'05:30',saida:'08:45',duracao:'3h15',class:'Normal',          status:'Carregado / Saiu'},
+  {plano:'6103137620-1',placa:'DWO4E62',motorista:'MARCOS DE JESUS',   perfil:'VUC',    chegada:'06:00',saida:'09:20',duracao:'3h20',class:'Normal',          status:'Carregado / Saiu'},
+  {plano:'6103082632-2',placa:'IGV2649',motorista:'MARCOS DE LIMA',    perfil:'CAVALO', chegada:'07:15',saida:'',     duracao:'—',  class:'Em andamento',    status:'Em Carregamento'},
+  {plano:'6103039732-1',placa:'DKI5D01',motorista:'FABIANO ALVES',     perfil:'VUC',    chegada:'07:45',saida:'',     duracao:'—',  class:'Em andamento',    status:'Em Carregamento'},
+  {plano:'6103135585-1',placa:'DXQ9102',motorista:'VANDERLIM PEREIRA', perfil:'TOCO',   chegada:'06:30',saida:'10:00',duracao:'3h30',class:'Demora leve',    status:'Carregado / Saiu'},
+  {plano:'6103108981-1',placa:'DYF1I02',motorista:'ABNER DE BRITO',    perfil:'HR / VAN',chegada:'',   saida:'',     duracao:'—',  class:'—',               status:'Não Iniciado'},
+  {plano:'6103083933-1',placa:'EFW8E65',motorista:'JOSE IVANILSON',    perfil:'FIORINO',chegada:'',    saida:'',     duracao:'—',  class:'—',               status:'Não Iniciado'},
+  {plano:'6103084282-1',placa:'QQS2G85',motorista:'CLAUDIO BARBOSA',   perfil:'CAVALO', chegada:'08:10',saida:'',    duracao:'—',  class:'Em andamento',    status:'Em Carregamento'},
+  {plano:'6103036437-1',placa:'IGB4212',motorista:'GERALDO WIGGERS',   perfil:'TOCO',   chegada:'05:00',saida:'07:50',duracao:'2h50',class:'Normal',         status:'Carregado / Saiu'},
+  {plano:'6103075579-1',placa:'QQJ8H82',motorista:'VALCSON DA SILVA',  perfil:'FIORINO',chegada:'',    saida:'',     duracao:'—',  class:'—',               status:'Não Iniciado'},
+];
+
+let XML_DATA = [
+  {plano:'6103120853-1',placa:'MTH8367',motorista:'ROBERTSON PLATINI', xmlStatus:'OK',     rec:12,falt:0, ultRec:'10:32',valor:154496.00},
+  {plano:'6103137620-1',placa:'DWO4E62',motorista:'MARCOS DE JESUS',   xmlStatus:'Aguard', rec:3, falt:5, ultRec:'09:15',valor:20241.46},
+  {plano:'6103135585-1',placa:'DXQ9102',motorista:'VANDERLIM PEREIRA', xmlStatus:'OK',     rec:8, falt:0, ultRec:'11:00',valor:53619.30},
+  {plano:'6103108981-1',placa:'DYF1I02',motorista:'ABNER DE BRITO',    xmlStatus:'OK',     rec:5, falt:0, ultRec:'10:55',valor:21941.44},
+  {plano:'6103083933-1',placa:'EFW8E65',motorista:'JOSE IVANILSON',    xmlStatus:'Falt',   rec:0, falt:2, ultRec:'—',    valor:4871.96},
+  {plano:'6103082632-2',placa:'IGV2649',motorista:'MARCOS DE LIMA',    xmlStatus:'OK',     rec:20,falt:0, ultRec:'08:40',valor:113863.60},
+  {plano:'6103084282-1',placa:'QQS2G85',motorista:'CLAUDIO BARBOSA',   xmlStatus:'Aguard', rec:1, falt:3, ultRec:'07:22',valor:385.00},
+  {plano:'6103039732-1',placa:'DKI5D01',motorista:'FABIANO ALVES',     xmlStatus:'OK',     rec:9, falt:0, ultRec:'11:30',valor:20965.11},
+  {plano:'6103036437-1',placa:'IGB4212',motorista:'GERALDO WIGGERS',   xmlStatus:'OK',     rec:14,falt:0, ultRec:'09:50',valor:51062.80},
+  {plano:'6103075579-1',placa:'QQJ8H82',motorista:'VALCSON DA SILVA',  xmlStatus:'Falt',   rec:0, falt:4, ultRec:'—',    valor:8881.42},
+];
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+const fmtN = n => Number(n||0).toLocaleString('pt-BR');
+const fmtR = n => 'R$ '+Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtP = v => Math.round(Number(v||0)*100)+'%';
+
+function tipoLabel(t) {
+  const m = {'FIORINO':'FIO','HR / VAN':'HRV','VUC':'VUC','TOCO':'TOC','CAVALO':'CAV'};
+  const k = m[t]||'FIO';
+  return `<span class="tipo tipo-${k}">${t}</span>`;
+}
+
+function lbl(text, type) {
+  return `<span class="lbl lbl-${type}">${text}</span>`;
+}
+
+function farolDot(p) {
+  if (p>=.9) return '<span class="dot dot-red"></span>';
+  if (p>=.7) return '<span class="dot dot-orange"></span>';
+  if (p>=.4) return '<span class="dot dot-yellow"></span>';
+  return '<span class="dot dot-green"></span>';
+}
+function farolText(p) {
+  if (p>=.9) return 'Crítico';
+  if (p>=.7) return 'Alto';
+  if (p>=.4) return 'Moderado';
+  return 'OK';
+}
+function farolColor(p) {
+  if (p>=.9) return '#dc2626';
+  if (p>=.7) return '#f97316';
+  if (p>=.4) return '#eab308';
+  return '#16a34a';
+}
+
+function pbarHtml(p, color) {
+  const w = Math.min(Math.round(p*100),100);
+  const c = color || farolColor(p);
+  return `<div class="pbar"><div class="pbar-fill" style="width:${w}%;background:${c}"></div></div>`;
+}
+
+function gmLbl(s) {
+  if(s==='Sincronizado') return lbl('✓ Sincronizado','green');
+  if(s==='Pendente')     return lbl('⏳ Pendente','yellow');
+  if(s==='Erro')         return lbl('✕ Erro','red');
+  return lbl(s||'—','gray');
+}
+function waLbl(s) {
+  if(s==='Enviado') return lbl('✓ Enviado','green');
+  if(s==='Pendente') return lbl('⏳ Pendente','yellow');
+  if(s==='Falhou')  return lbl('✕ Falhou','red');
+  return lbl(s||'—','gray');
+}
+function cuLbl(s) {
+  if(!s) return lbl('—','gray');
+  const sl=s.toLowerCase();
+  if(sl==='dados encontrados') return lbl('✓ Dados OK','green');
+  if(sl==='mover para o mapa') return lbl('→ Mover Mapa','blue');
+  if(sl==='em andamento')      return lbl('⟳ Andamento','blue');
+  if(sl==='aguardando')        return lbl('⏳ Aguardando','yellow');
+  if(sl==='cancelado')         return lbl('✕ Cancelado','red');
+  return lbl(s,'gray');
+}
+function xmlLbl(s) {
+  if(s==='OK')    return lbl('✓ OK','green');
+  if(s==='Aguard') return lbl('⏳ Aguardando','yellow');
+  if(s==='Falt')  return lbl('✕ Faltante','red');
+  return lbl(s||'—','gray');
+}
+function statusDispLbl(s) {
+  if(s==='Disponível')  return lbl('● Disponível','green');
+  if(s==='Programado')  return lbl('● Programado','blue');
+  if(s==='Indisponível') return lbl('✕ Indisponível','red');
+  return lbl(s,'gray');
+}
+function jornadaLbl(s) {
+  if(s==='Carregado / Saiu') return lbl('✓ Saiu','green');
+  if(s==='Em Carregamento')  return lbl('⟳ Carregando','yellow');
+  if(s==='Não Iniciado')     return lbl('— Aguardando','gray');
+  return lbl(s,'gray');
+}
+
+// ═══════════════════════════════════════════════════════════
+// CALCULAR DASH
+// ═══════════════════════════════════════════════════════════
+function calcDash() {
+  const disp={}, util={}, indisp={};
+  TIPOS.forEach(t=>{ disp[t]=0; util[t]=0; indisp[t]=0; });
+  DISP.forEach(r=>{
+    const t=r.perfil;
+    if(!disp.hasOwnProperty(t)){disp[t]=0;util[t]=0;indisp[t]=0;}
+    if(r.status==='Indisponível'){indisp[t]++;}
+    else if(r.status==='Programado'){disp[t]++;util[t]++;}
+    else{disp[t]++;}
+  });
+  const tot=TIPOS.reduce((s,t)=>s+disp[t],0);
+  const utot=TIPOS.reduce((s,t)=>s+util[t],0);
+  const pct=tot>0?utot/tot:0;
+  return {disp,util,indisp,tot,utot,pct,corte:tot-utot};
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER DASHBOARD
+// ═══════════════════════════════════════════════════════════
+let donutChart=null;
+function renderDash() {
+  const d=calcDash();
+  const now=new Date();
+  document.getElementById('dash-ref').textContent=DATA_REF;
+  document.getElementById('dash-updated').textContent=now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('kpi-disp').textContent=fmtN(d.tot);
+  document.getElementById('kpi-util').textContent=fmtN(d.utot);
+  document.getElementById('kpi-pct').textContent=fmtP(d.pct);
+  document.getElementById('kpi-corte').textContent=fmtN(d.corte);
+  document.getElementById('kpi-farol').textContent=farolText(d.pct);
+  document.getElementById('donut-num').textContent=fmtN(d.tot);
+
+  // Tabela Disp por Tipo
+  document.getElementById('tb-disp-tipo').innerHTML=TIPOS.map(t=>{
+    const q=d.disp[t], meta=META[t]||0;
+    const pm=meta>0?q/meta:0, pp=d.tot>0?q/d.tot:0;
+    return `<tr><td>${tipoLabel(t)}</td><td><b>${fmtN(q)}</b></td><td>${fmtP(pm)}</td><td>${pbarHtml(pm,TIPO_COLORS[t])}</td><td>${fmtP(pp)}</td></tr>`;
+  }).join('');
+  document.getElementById('tf-disp-tipo').innerHTML=`<tr><td>TOTAL</td><td>${fmtN(d.tot)}</td><td>—</td><td></td><td>100%</td></tr>`;
+
+  // Tabela Util por Tipo
+  document.getElementById('tb-util-tipo').innerHTML=TIPOS.map(t=>{
+    const qu=d.util[t], qd=d.disp[t], corte=Math.max(qd-qu,0), p=qd>0?qu/qd:0;
+    return `<tr><td>${tipoLabel(t)}</td><td><b>${fmtN(qu)}</b></td><td>${fmtN(corte)}</td><td>${fmtP(p)}</td><td>${pbarHtml(p)}</td><td>${farolDot(p)} ${farolText(p)}</td></tr>`;
+  }).join('');
+  document.getElementById('tf-util-tipo').innerHTML=`<tr><td>TOTAL</td><td>${fmtN(d.utot)}</td><td>${fmtN(d.corte)}</td><td>${fmtP(d.pct)}</td><td></td><td>${farolText(d.pct)}</td></tr>`;
+
+  // Donut
+  const tipos=TIPOS.filter(t=>d.disp[t]>0);
+  const ctx=document.getElementById('donutChart').getContext('2d');
+  if(donutChart)donutChart.destroy();
+  donutChart=new Chart(ctx,{
+    type:'doughnut',
+    data:{labels:tipos,datasets:[{data:tipos.map(t=>d.disp[t]),backgroundColor:tipos.map(t=>TIPO_COLORS[t]),borderColor:'#fff',borderWidth:3}]},
+    options:{cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${c.parsed} (${Math.round(c.parsed/d.tot*100)}%)`}}},animation:{duration:500}}
+  });
+
+  // Legend
+  document.getElementById('tb-legend').innerHTML=tipos.map(t=>{
+    const q=d.disp[t], u=d.util[t], p=q>0?u/q:0, pp=d.tot>0?q/d.tot:0;
+    return `<tr><td><span class="dot" style="background:${TIPO_COLORS[t]}"></span>${t}</td><td>${fmtN(q)}</td><td>${Math.round(pp*100)}%</td><td>${Math.round(p*100)}%</td><td>${farolDot(p)}</td></tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER PROGRAMAÇÃO
+// ═══════════════════════════════════════════════════════════
+function renderProg(f={}) {
+  const s=(f.search||'').toLowerCase(), tipo=f.tipo||'', st=f.status||'', gm=f.gm||'', xml=f.xml||'';
+  const rows=PROG.filter(r=>{
+    if(s&&![r.plano,r.placa,r.motorista,r.perfil].join(' ').toLowerCase().includes(s))return false;
+    if(tipo&&r.perfil!==tipo)return false;
+    if(st&&!r.cu.toLowerCase().includes(st.toLowerCase()))return false;
+    if(gm&&!r.gm.includes(gm))return false;
+    if(xml&&!r.xml.includes(xml))return false;
+    return true;
+  });
+  document.getElementById('p-count').textContent=rows.length+' registro'+(rows.length!==1?'s':'');
+  document.getElementById('tb-prog').innerHTML=rows.length?rows.map((r,i)=>`<tr>
+    <td style="color:var(--text-muted)">${i+1}</td>
+    <td style="font-family:monospace;font-size:11px;font-weight:600">${r.plano}</td>
+    <td>${tipoLabel(r.perfil)}</td>
+    <td style="font-size:11px">${r.dataSaida}</td>
+    <td style="font-size:11px">${r.dataCarreg}</td>
+    <td style="font-family:monospace;font-weight:700">${r.placa}</td>
+    <td style="font-size:12px">${r.motorista}</td>
+    <td>${gmLbl(r.gm)}</td>
+    <td>${waLbl(r.wa)}</td>
+    <td>${cuLbl(r.cu)}</td>
+    <td>${xmlLbl(r.xml)}</td>
+    <td style="text-align:right;font-family:monospace;font-size:11px">${fmtR(r.valor)}</td>
+    <td><a class="tbl-link" href="${r.url}" target="_blank">↗ CU</a></td>
+  </tr>`).join(''):`<tr class="empty-row"><td colspan="13">Nenhum registro encontrado</td></tr>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER DISPONIBILIDADE
+// ═══════════════════════════════════════════════════════════
+function renderDisp(f={}) {
+  const s=(f.search||'').toLowerCase(), tipo=f.tipo||'', st=f.status||'';
+  const rows=DISP.filter(r=>{
+    if(s&&![r.placa,r.motorista,r.perfil].join(' ').toLowerCase().includes(s))return false;
+    if(tipo&&r.perfil!==tipo)return false;
+    if(st&&r.status!==st)return false;
+    return true;
+  });
+  document.getElementById('d-count').textContent=rows.length+' registro'+(rows.length!==1?'s':'');
+  document.getElementById('tb-disp').innerHTML=rows.length?rows.map((r,i)=>`<tr>
+    <td style="color:var(--text-muted)">${i+1}</td>
+    <td style="font-size:11px">${r.data}</td>
+    <td style="font-family:monospace;font-weight:700">${r.placa}</td>
+    <td style="font-size:12px">${r.motorista}</td>
+    <td>${tipoLabel(r.perfil)}</td>
+    <td>${statusDispLbl(r.status)}</td>
+    <td style="font-family:monospace;font-size:11px">${r.contato}</td>
+  </tr>`).join(''):`<tr class="empty-row"><td colspan="7">Nenhum registro</td></tr>`;
+
+  // Tipo boxes
+  const tot={}, util={}, indisp={};
+  TIPOS.forEach(t=>{tot[t]=0;util[t]=0;indisp[t]=0;});
+  DISP.forEach(r=>{
+    const t=r.perfil;
+    if(!tot.hasOwnProperty(t)){tot[t]=0;util[t]=0;indisp[t]=0;}
+    if(r.status==='Programado'){tot[t]++;util[t]++;}
+    else if(r.status==='Indisponível'){indisp[t]++;}
+    else{tot[t]++;}
+  });
+  document.getElementById('tipo-boxes').innerHTML=TIPOS.map(t=>{
+    const c=TIPO_COLORS[t], livre=tot[t]-util[t];
+    return `<div class="tipo-box" style="border-top-color:${c}">
+      <div class="t-name" style="color:${c}">${t}</div>
+      <div class="t-num" style="color:${c}">${tot[t]}</div>
+      <div class="t-sub">${util[t]} prog · ${livre} livres · ${indisp[t]} indisp</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER JORNADA
+// ═══════════════════════════════════════════════════════════
+function renderJornada(f={}) {
+  const s=(f.search||'').toLowerCase(), st=f.status||'';
+  const rows=JORN.filter(r=>{
+    if(s&&![r.plano,r.placa,r.motorista].join(' ').toLowerCase().includes(s))return false;
+    if(st&&r.status!==st)return false;
+    return true;
+  });
+  const saiu=JORN.filter(r=>r.status==='Carregado / Saiu').length;
+  const carr=JORN.filter(r=>r.status==='Em Carregamento').length;
+  const naoi=JORN.filter(r=>r.status==='Não Iniciado').length;
+  const durs=JORN.filter(r=>r.duracao!=='—').map(r=>{const m=r.duracao.match(/(\d+)h(\d+)/);return m?+m[1]*60+ +m[2]:0;});
+  const med=durs.length?durs.reduce((a,b)=>a+b,0)/durs.length:0;
+  const medH=Math.floor(med/60), medM=Math.round(med%60);
+  document.getElementById('j-saiu').textContent=saiu;
+  document.getElementById('j-carr').textContent=carr;
+  document.getElementById('j-naoinic').textContent=naoi;
+  document.getElementById('j-media').textContent=durs.length?`${medH}h${String(medM).padStart(2,'0')}':'—'`;
+  document.getElementById('jorn-ref').textContent=DATA_REF;
+  const classLbl=c=>c==='Normal'?lbl('Normal','green'):c==='Demora leve'?lbl('Demora','yellow'):c==='Em andamento'?lbl('Andamento','blue'):lbl(c||'—','gray');
+  document.getElementById('tb-jorn').innerHTML=rows.length?rows.map((r,i)=>`<tr>
+    <td style="color:var(--text-muted)">${i+1}</td>
+    <td style="font-family:monospace;font-size:11px;font-weight:600">${r.plano}</td>
+    <td style="font-family:monospace;font-weight:700">${r.placa}</td>
+    <td style="font-size:12px">${r.motorista}</td>
+    <td>${tipoLabel(r.perfil)}</td>
+    <td style="font-family:monospace;font-size:12px">${r.chegada||'—'}</td>
+    <td style="font-family:monospace;font-size:12px">${r.saida||'—'}</td>
+    <td style="font-family:monospace;font-size:12px">${r.duracao}</td>
+    <td>${classLbl(r.class)}</td>
+    <td>${jornadaLbl(r.status)}</td>
+  </tr>`).join(''):`<tr class="empty-row"><td colspan="10">Nenhum registro</td></tr>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER PASSAGEM
+// ═══════════════════════════════════════════════════════════
+function renderPassagem() {
+  const d=calcDash();
+  const hora=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  ['turno-hora-prog','turno-hora-disp','turno-hora-jorn'].forEach(id=>document.getElementById(id).textContent=hora);
+  const row=(l,v,vc='')=>`<div class="turno-row"><span class="tl">${l}</span><span class="tv" style="${vc}">${v}</span></div>`;
+  document.getElementById('tc-prog').innerHTML=
+    row('Total de planos',PROG.length)+
+    row('Dados OK',PROG.filter(r=>r.cu==='dados encontrados').length,'color:var(--green)')+
+    row('Mover p/ Mapa',PROG.filter(r=>r.cu==='mover para o mapa').length)+
+    row('Em Andamento',PROG.filter(r=>r.cu==='em andamento').length)+
+    row('Aguardando',PROG.filter(r=>r.cu==='aguardando').length)+
+    row('GreenMile OK',PROG.filter(r=>r.gm==='Sincronizado').length,'color:var(--green)')+
+    row('WhatsApp Enviado',PROG.filter(r=>r.wa==='Enviado').length,'color:var(--green)');
+  document.getElementById('tc-disp').innerHTML=
+    row('Total Disponível',d.tot)+
+    row('Utilizado',d.utot,'color:var(--green)')+
+    row('% Utilização',fmtP(d.pct))+
+    row('2º Corte',d.corte)+
+    TIPOS.map(t=>row(t+' disp.',d.disp[t])).join('');
+  const saiu=JORN.filter(r=>r.status==='Carregado / Saiu').length;
+  const carr=JORN.filter(r=>r.status==='Em Carregamento').length;
+  const naoi=JORN.filter(r=>r.status==='Não Iniciado').length;
+  document.getElementById('tc-jorn').innerHTML=
+    row('Saíram do CD',saiu,'color:var(--green)')+
+    row('Em Carregamento',carr)+
+    row('Não Iniciados',naoi)+
+    row('Data Ref.',DATA_REF);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER XML
+// ═══════════════════════════════════════════════════════════
+function renderXML() {
+  const totalRec=XML_DATA.reduce((s,r)=>s+r.rec,0);
+  const totalFalt=XML_DATA.reduce((s,r)=>s+r.falt,0);
+  const comXml=XML_DATA.filter(r=>r.rec>0).length;
+  const totalVal=XML_DATA.reduce((s,r)=>s+r.valor,0);
+  document.getElementById('x-rec').textContent=totalRec;
+  document.getElementById('x-falt').textContent=totalFalt;
+  document.getElementById('x-planos').textContent=comXml;
+  document.getElementById('x-valor').textContent=fmtR(totalVal);
+  document.getElementById('tb-xml').innerHTML=XML_DATA.map((r,i)=>`<tr>
+    <td style="color:var(--text-muted)">${i+1}</td>
+    <td style="font-family:monospace;font-size:11px;font-weight:600">${r.plano}</td>
+    <td style="font-family:monospace;font-weight:700">${r.placa}</td>
+    <td style="font-size:12px">${r.motorista}</td>
+    <td>${xmlLbl(r.xmlStatus)}</td>
+    <td style="text-align:center"><b>${r.rec}</b></td>
+    <td style="text-align:center;color:${r.falt>0?'var(--red)':'var(--text-muted)'}">${r.falt||'—'}</td>
+    <td style="font-family:monospace;font-size:11px">${r.ultRec}</td>
+    <td style="text-align:right;font-family:monospace;font-size:11px">${fmtR(r.valor)}</td>
+  </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// NAVEGAÇÃO
+// ═══════════════════════════════════════════════════════════
+const TITLES = {
+  dashboard:'Dashboard', programacao:'Programação', disponibilidade:'Disponibilidade',
+  jornada:'Jornada Interna', passagem:'Passagem de Turno', xml:'XML / NFs'
+};
+function goTo(id) {
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.section===id));
+  document.querySelectorAll('.section').forEach(el=>el.classList.toggle('active',el.id==='section-'+id));
+  document.getElementById('hdr-breadcrumb').textContent=TITLES[id]||id;
+  if(id==='dashboard')    renderDash();
+  if(id==='programacao')  renderProg();
+  if(id==='disponibilidade') renderDisp();
+  if(id==='jornada')      renderJornada();
+  if(id==='passagem')     renderPassagem();
+  if(id==='xml')          renderXML();
+}
+document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>goTo(el.dataset.section)));
+
+// ═══════════════════════════════════════════════════════════
+// FILTROS
+// ═══════════════════════════════════════════════════════════
+function watchProg() { renderProg({search:document.getElementById('p-search').value,tipo:document.getElementById('p-tipo').value,status:document.getElementById('p-status').value,gm:document.getElementById('p-gm').value,xml:document.getElementById('p-xml').value}); }
+function watchDisp() { renderDisp({search:document.getElementById('d-search').value,tipo:document.getElementById('d-tipo').value,status:document.getElementById('d-status').value}); }
+function watchJorn() { renderJornada({search:document.getElementById('j-search').value,status:document.getElementById('j-status').value}); }
+['p-search','p-tipo','p-status','p-gm','p-xml'].forEach(id=>{const e=document.getElementById(id);if(e){e.addEventListener('input',watchProg);e.addEventListener('change',watchProg);}});
+['d-search','d-tipo','d-status'].forEach(id=>{const e=document.getElementById(id);if(e){e.addEventListener('input',watchDisp);e.addEventListener('change',watchDisp);}});
+['j-search','j-status'].forEach(id=>{const e=document.getElementById(id);if(e){e.addEventListener('input',watchJorn);e.addEventListener('change',watchJorn);}});
+
+function limparProg(){['p-search','p-tipo','p-status','p-gm','p-xml'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderProg();}
+function limparDisp(){['d-search','d-tipo','d-status'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderDisp();}
+function limparJornada(){['j-search','j-status'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});renderJornada();}
+
+// ═══════════════════════════════════════════════════════════
+// RELÓGIO
+// ═══════════════════════════════════════════════════════════
+function tick() {
+  const n=new Date();
+  document.getElementById('sidebar-clock').textContent=n.toLocaleTimeString('pt-BR');
+  document.getElementById('hdr-date').textContent=n.toLocaleDateString('pt-BR');
+}
+setInterval(tick,1000); tick();
+
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+function toast(msg,type='') {
+  const el=document.createElement('div');
+  el.className='toast'+(type?' '+type:'');
+  el.textContent=msg;
+  document.getElementById('toast-wrap').appendChild(el);
+  setTimeout(()=>el.remove(),3200);
+}
+
+function enviarTurno(tipo) { toast('✅ Flash de '+tipo+' enviado ao Google Chat!'); }
+
+// ═══════════════════════════════════════════════════════════
+// CARREGAMENTO REAL DE DADOS (Google Apps Script)
+// ═══════════════════════════════════════════════════════════
+function _secaoAtiva() {
+  const s=document.querySelector('.section.active');
+  return s ? s.id.replace('section-','') : 'dashboard';
+}
+function _reRender(sec) {
+  if(sec==='dashboard')       renderDash();
+  else if(sec==='programacao')  renderProg();
+  else if(sec==='disponibilidade') renderDisp();
+  else if(sec==='jornada')     renderJornada();
+  else if(sec==='passagem')    renderPassagem();
+  else if(sec==='xml')         renderXML();
+}
+
+function carregarTodos() {
+  if(!IS_GAS || _carregando) return;
+  _carregando=true;
+  toast('🔄 Buscando dados da planilha...','');
+
+  // ── DISPONIBILIDADE ─────────────────────────────────────
+  google.script.run
+    .withSuccessHandler(function(data){
+      if(data && data.ok && data.rows){
+        DISP=data.rows;
+        const s=_secaoAtiva();
+        if(s==='disponibilidade') renderDisp();
+        if(s==='dashboard')       renderDash();
+        if(s==='passagem')        renderPassagem();
+      } else if(data && data.error){
+        toast('Disp: '+data.error,'err');
+      }
+    })
+    .withFailureHandler(function(e){ toast('Erro disponibilidade: '+(e.message||e),'err'); })
+    .getPainelDispData();
+
+  // ── PROGRAMAÇÃO ─────────────────────────────────────────
+  google.script.run
+    .withSuccessHandler(function(data){
+      if(data && data.ok && data.rows){
+        PROG=data.rows;
+        if(data.dataRef) DATA_REF=data.dataRef;
+        // Derivar XML_DATA do PROG (status e valor quando disponíveis)
+        XML_DATA=PROG.map(function(r){
+          return {
+            plano:r.plano, placa:r.placa, motorista:r.motorista,
+            xmlStatus:r.xml||'—',
+            rec: r.xml==='OK'?1:(r.xml==='Aguard'?1:0),
+            falt:r.xml==='Falt'?1:0,
+            ultRec:'—', valor:Number(r.valor||0)
+          };
+        });
+        const s=_secaoAtiva();
+        if(s==='programacao') renderProg();
+        if(s==='xml')         renderXML();
+        if(s==='passagem')    renderPassagem();
+      } else if(data && data.error){
+        toast('Prog: '+data.error,'err');
+      }
+      _carregando=false;
+    })
+    .withFailureHandler(function(e){ toast('Erro programação: '+(e.message||e),'err'); _carregando=false; })
+    .getPainelProgramacaoData();
+
+  // ── JORNADA ─────────────────────────────────────────────
+  google.script.run
+    .withSuccessHandler(function(data){
+      if(data && data.ok && data.rows){
+        JORN=data.rows;
+        const s=_secaoAtiva();
+        if(s==='jornada')  renderJornada();
+        if(s==='passagem') renderPassagem();
+      }
+      if(data && data.warn) toast(data.warn,'');
+    })
+    .withFailureHandler(function(e){ toast('Erro jornada: '+(e.message||e),'err'); })
+    .getPainelJornadaData();
+}
+
+function recarregarDados() {
+  if(IS_GAS){
+    carregarTodos();
+  } else {
+    toast('🔄 Visualização local — dados de exemplo');
+    const a=document.querySelector('.section.active');
+    if(a) goTo(a.id.replace('section-',''));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+renderDash();
+
+if(IS_GAS){
+  // Carregar dados reais da planilha ao abrir
+  setTimeout(carregarTodos, 200);
+  // Auto-refresh a cada 90 segundos
+  setInterval(function(){
+    if(!document.hidden) carregarTodos();
+  }, 90000);
+}
+</script>
+</body>
+</html>

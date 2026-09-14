@@ -98,7 +98,7 @@ const CONFIG = {
   },
   XML_COBRANCA: {
     TO: 'LISTA LOGISTICA SÃO PAULO <listalogisticasp@3coracoes.com.br>, Vitor Farias <vitorfarias@3coracoes.com.br>',
-    CC: 'Carlos Peixoto <carlos.peixoto@thxgroup.com.br>, Cristiano Castilho <cristiano.castilho@thxgroup.com.br>',
+    CC: 'Nathanael Silva <nathanael.silva@thxgroup.com.br>, Carlos Peixoto <carlos.peixoto@thxgroup.com.br>, Cristiano Castilho <cristiano.castilho@thxgroup.com.br>',
     BCC: '',
     SUBJECT_PREFIX: 'XML',
     FILTER_TODAY_ONLY: false,
@@ -1123,6 +1123,61 @@ function buildXmlRecebimentoAnyFallbackQuery_(cfg, todayTokens) {
   return 'newer_than:' + days + 'd' + doneClause + ' has:attachment' + todayClause;
 }
 
+function buildXmlRecebimentoLogCobrancaQueries_(cfg, maxSubjects) {
+  const subjects = getXmlCobrancaLoggedSubjects_(maxSubjects || 25);
+  const doneClause = cfg.EXCLUDE_DONE_LABEL
+    ? (' -label:"' + String(cfg.LABEL_DONE || 'XML_PROCESSADO').replace(/"/g, '\\"') + '"')
+    : '';
+  return subjects.map(function (subject) {
+    return 'has:attachment' + doneClause + ' subject:"' + String(subject || '').replace(/"/g, '\\"') + '"';
+  });
+}
+
+function getXmlCobrancaLoggedSubjects_(maxSubjects) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName('LOG_XML_COBRANCA');
+  const out = [];
+  const seen = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+
+  const limit = Math.max(1, Number(maxSubjects || 25));
+  const lastRow = sh.getLastRow();
+  const startRow = Math.max(2, lastRow - 300 + 1);
+  const values = sh.getRange(startRow, 10, lastRow - startRow + 1, 1).getDisplayValues();
+  for (let i = values.length - 1; i >= 0 && out.length < limit; i--) {
+    const subject = String(values[i] && values[i][0] || '').trim();
+    const key = normalizeHeader_(subject);
+    if (!subject || seen[key]) continue;
+    seen[key] = true;
+    out.push(subject);
+  }
+  return out;
+}
+
+function searchGmailThreadsByQueries_(queries, maxThreads) {
+  const out = [];
+  const seen = {};
+  const used = [];
+  const limit = Math.max(1, Number(maxThreads || 10));
+  for (let i = 0; i < (queries || []).length && out.length < limit; i++) {
+    const query = String(queries[i] || '').trim();
+    if (!query) continue;
+    const found = GmailApp.search(query, 0, limit - out.length) || [];
+    if (found.length) used.push(query);
+    for (let j = 0; j < found.length && out.length < limit; j++) {
+      const thread = found[j];
+      const id = String(thread && thread.getId ? thread.getId() : '').trim();
+      if (!id || seen[id]) continue;
+      seen[id] = true;
+      out.push(thread);
+    }
+  }
+  return {
+    threads: out,
+    query: used.length ? ('LOG_XML_COBRANCA: ' + used.join(' || ')) : 'LOG_XML_COBRANCA',
+  };
+}
+
 function buildXmlTodayTokens_(dateObj, cfg) {
   const d = dateObj instanceof Date ? dateObj : new Date();
   const tz = getXmlRecebimentoTimeZone_(cfg);
@@ -1295,6 +1350,7 @@ function monitorarAtualizacaoXmlRecebidos() {
   const queryPrimary = buildXmlRecebimentoSearchQuery_(cfg, todayTokens);
   const queryFallback = buildXmlRecebimentoFallbackQuery_(cfg, todayTokens);
   const queryAnyFallback = buildXmlRecebimentoAnyFallbackQuery_(cfg, todayTokens);
+  const queryLogCobranca = buildXmlRecebimentoLogCobrancaQueries_(cfg, 25);
   let selectedQuery = queryPrimary;
   let threads = GmailApp.search(queryPrimary, 0, 1);
 
@@ -1305,6 +1361,11 @@ function monitorarAtualizacaoXmlRecebidos() {
   if (!threads.length && cfg.ENABLE_FALLBACK_SEARCH && cfg.ENABLE_ANY_ATTACHMENT_FALLBACK) {
     threads = GmailApp.search(queryAnyFallback, 0, 1);
     if (threads.length) selectedQuery = queryAnyFallback;
+  }
+  if (!threads.length && queryLogCobranca.length) {
+    const logSearch = searchGmailThreadsByQueries_(queryLogCobranca, 1);
+    threads = logSearch.threads;
+    if (threads.length) selectedQuery = logSearch.query;
   }
   if (!threads.length) {
     return { ok: true, skipped: true, reason: 'no_new_xml', query: selectedQuery };
@@ -1367,24 +1428,48 @@ function processarXmlRecebidosAgora(options) {
     const queryPrimary = buildXmlRecebimentoSearchQuery_(cfg, todayTokens);
     const queryFallback = buildXmlRecebimentoFallbackQuery_(cfg, todayTokens);
     const queryAnyFallback = buildXmlRecebimentoAnyFallbackQuery_(cfg, todayTokens);
+    const queryLogCobranca = buildXmlRecebimentoLogCobrancaQueries_(cfg, 25);
     let selectedQuery = queryPrimary;
+    let selectedQuerySource = 'primary';
     let threads = GmailApp.search(queryPrimary, 0, cfg.MAX_THREADS_PER_RUN);
     if (!threads.length && cfg.ENABLE_FALLBACK_SEARCH) {
       threads = GmailApp.search(queryFallback, 0, cfg.MAX_THREADS_PER_RUN);
-      if (threads.length) selectedQuery = queryFallback;
+      if (threads.length) {
+        selectedQuery = queryFallback;
+        selectedQuerySource = 'fallback';
+      }
     }
     if (!threads.length && cfg.ENABLE_FALLBACK_SEARCH && cfg.ENABLE_ANY_ATTACHMENT_FALLBACK) {
       threads = GmailApp.search(queryAnyFallback, 0, cfg.MAX_THREADS_PER_RUN);
-      if (threads.length) selectedQuery = queryAnyFallback;
+      if (threads.length) {
+        selectedQuery = queryAnyFallback;
+        selectedQuerySource = 'any_fallback';
+      }
+    }
+    if (!threads.length && queryLogCobranca.length) {
+      const logSearch = searchGmailThreadsByQueries_(queryLogCobranca, cfg.MAX_THREADS_PER_RUN);
+      threads = logSearch.threads;
+      if (threads.length) {
+        selectedQuery = logSearch.query;
+        selectedQuerySource = 'log_cobranca';
+      }
     }
     stats.threads = threads.length;
+    const messageFilterCfg = selectedQuerySource === 'log_cobranca'
+      ? applyXmlRecebimentoOverrides_(cfg, {
+        REQUIRE_TODAY_DATE_IN_TEXT: false,
+        REQUIRE_TODAY_IN_SUBJECT: false,
+      })
+      : cfg;
 
     logEvent_('INFO', 'RUN_START', { status: 'STARTED', detalhe: 'query=' + selectedQuery, emails: threads.length }, true);
 
     if (selectedQuery !== queryPrimary) {
       logEvent_('WARN', 'QUERY_FALLBACK', {
         status: 'FALLBACK',
-        detalhe: 'Sem e-mail na label; fallback por assunto/periodo aplicado',
+        detalhe: selectedQuerySource === 'log_cobranca'
+          ? 'Sem e-mail na busca padrao; fallback pelos assuntos enviados em LOG_XML_COBRANCA aplicado'
+          : 'Sem e-mail na label; fallback por assunto/periodo aplicado',
       });
     }
 
@@ -1417,7 +1502,7 @@ function processarXmlRecebidosAgora(options) {
         const message = messages[m];
         if (!message) continue;
 
-        if (!messageMatchesXmlTodayFilter_(message, cfg, todayTokens)) {
+        if (!messageMatchesXmlTodayFilter_(message, messageFilterCfg, todayTokens)) {
           stats.filteredByDate++;
           continue;
         }
@@ -11693,15 +11778,17 @@ function createJornadaDailyTrigger() {
 
 function doGet(e) {
   const action = e && e.parameter && e.parameter.action;
-  
+
   if (action === 'flash_dashboard') {
     if (typeof renderFlashDashboard_ === 'function') {
       return renderFlashDashboard_(e);
     }
   }
 
-  return ContentService.createTextOutput('3C Programação Automática API Online')
-    .setMimeType(ContentService.MimeType.TEXT);
+  // Painel Operacional (padrão)
+  return HtmlService.createHtmlOutputFromFile('painel')
+    .setTitle('THX Group — Painel Operacional')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function doPost(e) {
