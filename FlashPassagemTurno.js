@@ -120,6 +120,16 @@ function coletarDadosPassagemTurno_() {
     }
   }
 
+  // ========== MAPA PERFIL POR PLACA (a partir da Disponibilidade já processada) ==========
+  var perfilPorPlaca = {};
+  var todosVeicDisp = veiculosComPlano.concat(veiculosDisponiveis);
+  for (var ppi = 0; ppi < todosVeicDisp.length; ppi++) {
+    var vd = todosVeicDisp[ppi];
+    if (vd.placa && vd.perfil) {
+      perfilPorPlaca[normalizePlate_(vd.placa) || vd.placa] = vd.perfil;
+    }
+  }
+
   // ========== JORNADA INTERNA ==========
   var shJornada = findSheetCaseInsensitive_(ss, getJornadaSheetName_());
   var jornadaData = {
@@ -149,7 +159,7 @@ function coletarDadosPassagemTurno_() {
     var cJPlaca = getHeaderColOptional_(jMap, ['PLACA']);
     var cJMotorista = getHeaderColOptional_(jMap, ['MOTORISTA']);
     var cJPlano = getHeaderColOptional_(jMap, ['PLANO DE VIAGEM']);
-    var cJPerfil = getHeaderColOptional_(jMap, ['PERFIL', 'TIPO VEICULO', 'TIPO VEÍCULO', 'TIPO']);
+    var cJPerfil = getHeaderColOptional_(jMap, ['PERFIL DO VEICULO', 'PERFIL DO VEÍCULO', 'PERFIL', 'TIPO VEICULO', 'TIPO VEÍCULO', 'TIPO']);
 
     var jLastRow = shJornada.getLastRow();
     var jLastCol = shJornada.getLastColumn();
@@ -191,6 +201,11 @@ function coletarDadosPassagemTurno_() {
         else if (jPerf.indexOf('VUC') !== -1) jPerf = 'VUC';
         else if (jPerf.indexOf('TOCO') !== -1) jPerf = 'TOCO';
         else if (jPerf.indexOf('CAVALO') !== -1 || jPerf.indexOf('CARRETA') !== -1) jPerf = 'CAVALO';
+        // Fallback: busca perfil pelo mapa da Disponibilidade (cruza por placa)
+        if (!jPerf && placaVal) {
+          var placaNormJ = (typeof normalizePlate_ === 'function' ? normalizePlate_(placaVal) : null) || placaVal;
+          jPerf = perfilPorPlaca[placaNormJ] || '';
+        }
         var chegou = false;
         var saiu = false;
 
