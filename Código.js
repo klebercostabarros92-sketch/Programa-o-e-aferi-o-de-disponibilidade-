@@ -43,15 +43,15 @@ const CONFIG = {
     BASE_URL: 'https://api.clickup.com/api/v2',
     LIST_ID_MOTORISTAS: '901308597214',
     PAGE_SIZE: 500,
-    UNIDADE_FIELD: 'UNIDADE',
+    UNIDADE_FIELD: 'Cliente / Unidade',
     UNIDADE_ALVO: 'CAFÉ 3C GUARULHOS',
     STATUS_FIELD: 'STATUS',
     STATUS_ALVO: 'MOTORISTA ATIVO',
     STATUS_ALVO_SECUNDARIO: 'AGUARDANDO PRIMEIRA ESCALA',
-    PLACA_FIELD: 'PLACA',
-    PERFIL_FIELD: 'MODELO',
-    MOTORISTA_FIELD: 'MOTORISTA',
-    CONTATO_FIELD: 'CONTATO MOTORISTA',
+    PLACA_FIELD: 'Placa',
+    PERFIL_FIELD: 'Perfil de veículo',
+    MOTORISTA_FIELD: 'Nome Motorista',
+    CONTATO_FIELD: 'Contato Motorista',
     PROGRAMACAO: {
       LIST_ID_CARDS: '901314444834',
       LIST_ID_MAPA: '90136429320',
@@ -3913,13 +3913,14 @@ function runAtualizarDisponibilidadeClickUp_(options) {
     });
 
     ctx.step = 'fetch_clickup';
-    // Temporariamente reduzimos os filtros na API para garantir que não estamos filtrando demais no servidor
+    // Otimização Crítica: Filtrando por Tags e Status diretamente na API para evitar processar 8000+ tarefas
     const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, {
       debug: debug,
-      // statuses: [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO].filter(Boolean)
+      statuses: [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO].filter(Boolean),
+      tags: [CONFIG.CLICKUP.UNIDADE_ALVO].filter(Boolean)
     });
     if (debug) {
-      appDebugPrint_('[DEBUG] ClickUp tasks baixadas (sem filtro API)', {
+      appDebugPrint_('[DEBUG] ClickUp tasks filtradas baixadas', {
         total: tasks.length,
       });
     }
@@ -4980,7 +4981,16 @@ function filtrarMotoristasDisponibilidade_(items) {
     const unitMatch = unidade === unitTarget || tags.indexOf(unitTarget) !== -1;
     const statusMatch = status === s1 || (s2 && status === s2);
 
-    return unitMatch && statusMatch;
+    if (debug && unitMatch && statusMatch) {
+    appDebugPrint_('[MATCH] Motorista alvo encontrado', {
+      nome: item.motorista,
+      placa: item.placa,
+      unidade: item.unidade,
+      status: item.status
+    });
+  }
+
+  return unitMatch && statusMatch;
   });
 }
 
