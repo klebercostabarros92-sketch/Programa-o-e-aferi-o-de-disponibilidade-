@@ -3941,7 +3941,7 @@ function runAtualizarDisponibilidadeClickUp_(options) {
         semStatus: parsed.filter(function (x) { return !String(x.status || '').trim(); }).length,
       });
     }
-    const filtrados = filtrarMotoristasDisponibilidade_(parsed);
+    const filtrados = filtrarMotoristasDisponibilidade_(parsed, debug);
     if (debug) {
       appDebugPrint_('[DEBUG] ClickUp tasks filtradas (unidade/status)', {
         total: filtrados.length,
@@ -4973,7 +4973,7 @@ function resolveClickUpCustomFieldValue_(cf) {
   return String(cf.value);
 }
 
-function filtrarMotoristasDisponibilidade_(items) {
+function filtrarMotoristasDisponibilidade_(items, debug) {
   return (items || []).filter(function (item) {
     const unitTarget = normalizeTextLoose_(CONFIG.CLICKUP.UNIDADE_ALVO);
     const unidade = normalizeTextLoose_(item.unidade);
