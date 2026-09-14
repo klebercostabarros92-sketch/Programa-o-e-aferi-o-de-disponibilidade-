@@ -1,0 +1,6 @@
+"Task ID","Task Name","🤖 PLANO (short text)","🤖 UNIDADE (short text)","🤖 VEÍCULO (short text)","🟢 FAIXA KM (GM) (short text)","🤖 PLACA (short text)","💲 Valor do Frete Motorista (short text)"
+86ahtgcy2,6103135072-1,6103135072-1,GUARULHOS,CARRETA,1,IGB4212,1248.00,,"Veículo já contratado com CTRB EUS000581-9, ainda sem chegada no destino EUS."
+86ahtgd1t,6103140163-1,6103140163-1,GUARULHOS,FIORINO,2,FPW3I34,260.00,,"Veículo já contratado com CTRB EUS000583-5, ainda sem chegada no destino EUS."
+- CIOT não gerado: REPOM (CIOT com PEF).
+Mensagem de rejeição (Gerando o CIOT):
+Mensagem recebida da Repom: ContratadoLogs: Falha no processamento. Por favor, tente novamente em alguns minutos. Codigo Erro: 52777872"

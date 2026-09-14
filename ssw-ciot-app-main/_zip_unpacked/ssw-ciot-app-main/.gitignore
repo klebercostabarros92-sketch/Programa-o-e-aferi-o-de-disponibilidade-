@@ -1,0 +1,19 @@
+# dependências
+/node_modules
+npm-debug.log
+yarn-error.log
+
+# build
+/dist
+
+# arquivos do SO
+.DS_Store
+
+# ambiente
+.env
+.env.test
+.env.production
+
+# sessões SSW (runtime)
+/ssw-sessions
+
