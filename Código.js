@@ -1,4 +1,4 @@
-const CONFIG = {
+﻿const CONFIG = {
   // Configurações de Planilhas
   SHEET_PROGRAMACAO: 'Programa\u00e7\u00e3o',
   SHEET_DISPONIBILIDADE: 'Disponibilidade',
@@ -76,6 +76,7 @@ const CONFIG = {
         PLACA_BOT: '08c3c2bb-d87a-4a14-8711-8385ed687f94',
         JANELA_COLETA: 'f7bd644e-c363-4842-9474-51bc1d537b59', // Atualizado de 5b1c para 51bc
         MOTORISTA: '86362270-4f7c-4700-b4d9-8d307cf14339',
+        REGIAO_ENTREGA: '', // Região de Entrega (dropdown) — ID resolvido dinamicamente por nome
       },
     },
   },
@@ -3375,6 +3376,7 @@ function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx, options) {
   const c = cfg.CUSTOM_FIELDS || {};
   const placaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, c.PLACA_BOT, ['?? PLACA', 'PLACA']);
   const janelaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, c.JANELA_COLETA, ['?? Janela de coleta', 'Janela de coleta']);
+  const regiaoFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, c.REGIAO_ENTREGA, ['Região de Entrega', 'Regiao de Entrega', 'REGIÃO DE ENTREGA', 'Regiao Entrega']);
   const attempted = [];
   const errors = [];
   const warnings = [];
@@ -3431,6 +3433,7 @@ function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx, options) {
     String((rowCtx && rowCtx.agendaCarregamento) || '').trim() ||
     String((rowCtx && rowCtx.horarioAgendaMsgBase) || '').trim();
   trySetField_(janelaFieldIdResolved, agendaValue, '\u26A0\uFE0F Janela', false);
+  trySetField_(regiaoFieldIdResolved, rowCtx && rowCtx.regiao, 'Região de Entrega', true);
 
   const placaInput = String((rowCtx && rowCtx.placa) || '').trim();
   const agendaInput = String(agendaValue || '').trim();
@@ -3766,6 +3769,43 @@ function normalizeClickUpCustomFieldValueForApi_(taskId, fieldId, value) {
     if (optionUuid) return optionUuid;
     throw new Error('Opcao dropdown sem id/uuid/orderindex para Janela de coleta');
   }
+
+  // Região de Entrega é dropdown: enviar ID/UUID da opção pelo nome.
+  const isRegiaoField =
+    fieldNameNorm === normalizeHeader_('Região de Entrega') ||
+    fieldNameNorm === normalizeHeader_('Regiao de Entrega') ||
+    (cfs.REGIAO_ENTREGA && fieldIdStr === String(cfs.REGIAO_ENTREGA));
+
+  if (isRegiaoField) {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return value;
+    const options = asArray_(meta && meta.type_config && meta.type_config.options);
+    if (!options.length) return value;
+    const rawNorm = normalizeHeader_(raw);
+    let found = null;
+    for (let i = 0; i < options.length; i++) {
+      const opt = options[i] || {};
+      const name = String(opt.name || '').trim();
+      if (!name) continue;
+      if (name === raw || normalizeHeader_(name) === rawNorm) { found = opt; break; }
+    }
+    if (!found) {
+      appCodeLog_('[WARN] ClickUp Região de Entrega: opção não encontrada, enviando texto bruto', {
+        taskId: String(taskId || ''),
+        raw: raw,
+        optionNames: options.map(function (o) { return String(o && o.name || ''); }).join(', '),
+      });
+      return value;
+    }
+    const orderIndex = found.orderindex != null && String(found.orderindex).trim() !== ''
+      ? Number(found.orderindex)
+      : null;
+    const optionUuid = String(found.id || found.uuid || '').trim();
+    if (orderIndex != null && !isNaN(orderIndex)) return orderIndex;
+    if (optionUuid) return optionUuid;
+    return value;
+  }
+
   return value;
 }
 
