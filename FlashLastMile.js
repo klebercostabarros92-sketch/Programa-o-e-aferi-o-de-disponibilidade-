@@ -543,6 +543,7 @@ function canonicalizarTipoFlash_(value) {
 
 function monitorarAtualizacaoFlashLastMile() {
   var props = PropertiesService.getScriptProperties();
+  var cfg = getFlashLastMileConfig_();
   var assinaturaAtual = gerarAssinaturaFlashLastMile_();
   var assinaturaAnterior = props.getProperty('FLASH_LAST_MILE_SIGNATURE') || '';
   if (assinaturaAtual === assinaturaAnterior) {
@@ -550,9 +551,17 @@ function monitorarAtualizacaoFlashLastMile() {
   }
 
   var result = gerarFlashLastMile();
+  var chat = null;
+  if (cfg.SEND_CHAT_ON_UPDATE) {
+    try {
+      chat = enviarFlashLastMileNoChatAgora();
+    } catch (e) {
+      chat = { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  }
   props.setProperty('FLASH_LAST_MILE_SIGNATURE', assinaturaAtual);
   props.setProperty('FLASH_LAST_MILE_LAST_RUN', new Date().toISOString());
-  return { ok: true, skipped: false, run: result };
+  return { ok: true, skipped: false, run: result, chat: chat };
 }
 
 function ativarMonitorFlashLastMile1Min() {
@@ -609,8 +618,67 @@ function getFlashLastMileConfig_() {
   return {
     ENABLED: true,
     POLL_MINUTES: 1,
-    TRIGGER_FN: 'monitorarAtualizacaoFlashLastMile'
+    TRIGGER_FN: 'monitorarAtualizacaoFlashLastMile',
+    SEND_CHAT_ON_UPDATE: true,
+    CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAQAgYbz-m4/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=n9uEx-TRY0yDAqX0rE9Uvn5TYCqbRjleiAVNFlVTkPk',
+    DASHBOARD_URL: 'https://script.google.com/macros/s/AKfycbwobdqlQgKxsXBapDjo7qp0Sdk33xadB-Woa6floFU6dnSkdOhf5omR80xLbBEGkVNOiA/exec'
   };
+}
+
+function enviarFlashLastMileNoChatAgora() {
+  var cfg = getFlashLastMileConfig_();
+  var webhook = String(cfg.CHAT_WEBHOOK_URL || '').trim();
+  if (!webhook) throw new Error('CHAT_WEBHOOK_URL nao configurado.');
+
+  var data = typeof getFlashDashboardData_ === 'function' ? getFlashDashboardData_() : null;
+  if (!data) {
+    var base = normalizarDadosFlashLastMile_(coletarDadosFlashLastMile_());
+    data = {
+      dataReferencia: base.dataReferencia,
+      generatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss'),
+      kpis: {
+        totalDisponivel: Number(base.totalVeiculos || 0),
+        totalUtilizado: Number(base.totalUtilizado || 0),
+        pctUtilizacao: Number(base.totalVeiculos || 0) > 0 ? Number(base.totalUtilizado || 0) / Number(base.totalVeiculos || 1) : 0
+      },
+      disponibilidade: (base.tiposOrdenados || []).map(function (t) {
+        var qtd = Number(base.disponibilidadePorTipo[t] || 0);
+        return {
+          tipo: t,
+          qtd: qtd,
+          pctPart: Number(base.totalVeiculos || 0) > 0 ? qtd / Number(base.totalVeiculos || 1) : 0
+        };
+      })
+    };
+  }
+
+  var top = (data.disponibilidade || []).slice(0, 5).map(function (x) {
+    return '• ' + x.tipo + ': ' + x.qtd + ' (' + Math.round(Number(x.pctPart || 0) * 100) + '%)';
+  }).join('\\n');
+
+  var payload = {
+    text:
+      '*FLASH LAST MILE*\\n' +
+      'Data ref: ' + (data.dataReferencia || '-') + '\\n' +
+      'Disponivel: ' + Number((data.kpis && data.kpis.totalDisponivel) || 0) +
+      ' | Utilizado: ' + Number((data.kpis && data.kpis.totalUtilizado) || 0) +
+      ' | % Utilizacao: ' + Math.round(Number((data.kpis && data.kpis.pctUtilizacao) || 0) * 100) + '%\\n\\n' +
+      (top || 'Sem dados')
+  };
+
+  var r = UrlFetchApp.fetch(webhook, {
+    method: 'post',
+    contentType: 'application/json; charset=utf-8',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  var code = r.getResponseCode();
+  var body = r.getContentText() || '';
+  if (code < 200 || code >= 300) {
+    throw new Error('Google Chat HTTP ' + code + ': ' + body.slice(0, 300));
+  }
+
+  return { ok: true, status: code, preview: payload.text.slice(0, 220) };
 }
 
 function gerarAssinaturaFlashLastMile_() {

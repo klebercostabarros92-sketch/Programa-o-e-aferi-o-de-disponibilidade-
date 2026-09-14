@@ -144,6 +144,7 @@ function onOpen() {
     .addItem('\u{1f3b2} Aleatorizar Placas', 'aleatorizarPlacasProgramacao')
     .addSeparator()
     .addItem('\u{1f4ca} Atualizar FLASH LAST MILE', 'gerarFlashLastMile')
+    .addItem('\u{1f4e3} Enviar FLASH no Chat', 'enviarFlashLastMileNoChatAgora')
     .addItem('\u23f1\ufe0f Ativar auto FLASH (1min)', 'ativarMonitorFlashLastMile1Min')
     .addItem('\u23f9\ufe0f Desativar auto FLASH', 'desativarMonitorFlashLastMile');
 
