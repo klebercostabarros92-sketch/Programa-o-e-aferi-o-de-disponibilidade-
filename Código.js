@@ -41,13 +41,13 @@ const CONFIG = {
   CLICKUP: {
     TOKEN: '',
     BASE_URL: 'https://api.clickup.com/api/v2',
-    LIST_ID_MOTORISTAS: '901324284828',
+    LIST_ID_MOTORISTAS: '901308597214',
     PAGE_SIZE: 500,
     UNIDADE_FIELD: 'UNIDADE',
-    UNIDADE_ALVO: '3C GUARULHOS',
+    UNIDADE_ALVO: 'CAFÉ 3C GUARULHOS',
     STATUS_FIELD: 'STATUS',
-    STATUS_ALVO: 'Ativo',
-    STATUS_ALVO_SECUNDARIO: '3C - GRU aguardando a primeira escala',
+    STATUS_ALVO: 'MOTORISTA ATIVO',
+    STATUS_ALVO_SECUNDARIO: 'AGUARDANDO PRIMEIRA ESCALA',
     PLACA_FIELD: 'PLACA',
     PERFIL_FIELD: 'MODELO',
     MOTORISTA_FIELD: 'MOTORISTA',
@@ -412,7 +412,7 @@ function onOpen() {
   menuClickUp
     .addItem('\u{1f4cc} Criar Cards', 'criarCardsClickUpProgramacao')
     .addItem('\u{1f50e} Buscando dados', 'preencherCamposCardsClickUpProgramacao')
-    .addItem('\u{1f5fa}\ufe0f Mover para o mapa', 'moverCardsClickUpParaMapa')
+    // .addItem('\u{1f5fa}\ufe0f Mover para o mapa', 'moverCardsClickUpParaMapa')
     ;
 
   menuOps.addToUi();
@@ -10339,4 +10339,15 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+/**
+ * Funcao utilitaria para atualizar a API Key do ClickUp.
+ * EXECUTE ESTA FUNCAO UMA VEZ NO EDITOR DO APPS SCRIPT.
+ */
+function manuallyUpdateClickUpApiKey() {
+  const newKey = 'pk_254580721_G2XVY9NUAWY8EHFSBT7IPTXJEUE1292R';
+  PropertiesService.getScriptProperties().setProperty('CLICKUP_API_KEY', newKey);
+  console.log('API Key do ClickUp atualizada com sucesso!');
+  return 'OK';
 }
