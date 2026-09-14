@@ -8632,14 +8632,16 @@ function sendAttemicsTextMessage_(payload, options) {
 
   if (!token) throw new Error('Token da Attemics não configurado.');
 
+  // Conforme OpenAPI: Header "access-token"
   const headers = {
-    'Authorization': 'Bearer ' + token,
+    'access-token': token,
     'Content-Type': 'application/json'
   };
 
   const body = {
     number: number,
     message: message
+    // Outros campos opcionais suportados: forceSend, verifyContact, etc.
   };
 
   const response = UrlFetchApp.fetch(url, {
@@ -8654,7 +8656,7 @@ function sendAttemicsTextMessage_(payload, options) {
   const responseText = response.getContentText() || '';
 
   return {
-    ok: code === 200 || code === 201,
+    ok: code === 200 || code === 201 || code === 202,
     httpStatus: code,
     httpStatusText: responseText.slice(0, 50),
     responseText: responseText,
@@ -10436,119 +10438,22 @@ function createJornadaDailyTrigger() {
   ScriptApp.newTrigger(fn).timeBased().everyDays(1).atHour(6).create();
 }
 
-// =============================================
-// WHATSAPP WEB APP — FILA DE MENSAGENS
-// =============================================
-
-var FILA_WHATSAPP_SPREADSHEET_ID_ = '1ooEtvTdPAzAynx1UaRLYR7YCO8BJLitojJjxyBqriUg';
-var FILA_WHATSAPP_SHEET_NAME_ = 'FILA_WHATSAPP';
-var FILA_WHATSAPP_HEADERS_ = ['DataHora', 'Numero', 'Mensagem', 'Status', 'EnviadoEm', 'Erro'];
-
-function getFilaWhatsAppSpreadsheet_() {
-  var ss = null;
-  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
-  if (!ss) ss = SpreadsheetApp.openById(FILA_WHATSAPP_SPREADSHEET_ID_);
-  return ss;
-}
-
-function getOrCreateFilaWhatsAppSheet_(ss) {
-  var spreadsheet = ss || getFilaWhatsAppSpreadsheet_();
-  var sheet = spreadsheet.getSheetByName(FILA_WHATSAPP_SHEET_NAME_);
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet(FILA_WHATSAPP_SHEET_NAME_);
-    sheet.getRange(1, 1, 1, FILA_WHATSAPP_HEADERS_.length)
-      .setValues([FILA_WHATSAPP_HEADERS_])
-      .setFontWeight('bold');
-    sheet.setFrozenRows(1);
-    sheet.setColumnWidth(1, 160);
-    sheet.setColumnWidth(2, 140);
-    sheet.setColumnWidth(3, 500);
-    sheet.setColumnWidth(4, 110);
-    sheet.setColumnWidth(5, 160);
-    sheet.setColumnWidth(6, 200);
-  }
-  return sheet;
-}
-
 function doGet(e) {
-  if (e && e.parameter && e.parameter.action === 'debug_clickup') {
-    try {
-      var tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, false);
-      var parsed = tasks.slice(0, 10).map(parseClickUpTaskDisponibilidade_);
-      return ContentService.createTextOutput(JSON.stringify({ raw: tasks.slice(0, 5), parsed: parsed }))
-        .setMimeType(ContentService.MimeType.JSON);
-    } catch (err) {
-      return ContentService.createTextOutput(JSON.stringify({ error: String(err) }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-  }
-
-  // 1. Dashboard Fallback (se não for requisição do chatbot)
-  if (!e || !e.parameter || e.parameter.action !== 'pending') {
+  const action = e && e.parameter && e.parameter.action;
+  
+  if (action === 'flash_dashboard') {
     if (typeof renderFlashDashboard_ === 'function') {
       return renderFlashDashboard_(e);
     }
-    return ContentService.createTextOutput("Chatbot API is running.");
   }
 
-  // 2. Chatbot Fetch Pending Messages (action === 'pending')
-  try {
-    var ss = getFilaWhatsAppSpreadsheet_();
-    var sheet = ss.getSheetByName(FILA_WHATSAPP_SHEET_NAME_);
-    if (!sheet) {
-      return ContentService.createTextOutput(JSON.stringify({ messages: [] }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    var lastRow = sheet.getLastRow();
-    if (lastRow < 2) {
-      return ContentService.createTextOutput(JSON.stringify({ messages: [] }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    var data = sheet.getRange(2, 1, lastRow - 1, FILA_WHATSAPP_HEADERS_.length).getDisplayValues();
-    var pending = [];
-    for (var i = 0; i < data.length; i++) {
-      if (String(data[i][3] || '').trim() === 'PENDENTE') {
-        pending.push({
-          row: i + 2,
-          numero: data[i][1],
-          mensagem: data[i][2],
-        });
-      }
-    }
-    return ContentService.createTextOutput(JSON.stringify({ messages: pending }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+  return ContentService.createTextOutput('3C Programação Automática API Online')
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
 function doPost(e) {
-  try {
-    var body = JSON.parse(e.postData.contents);
-    var ss = getFilaWhatsAppSpreadsheet_();
-    var sheet = ss.getSheetByName(FILA_WHATSAPP_SHEET_NAME_);
-    if (!sheet) {
-      return ContentService.createTextOutput(JSON.stringify({ error: 'sheet not found' }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    var results = body.results || [];
-    var tz = Session.getScriptTimeZone() || 'America/Sao_Paulo';
-    var now = Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy HH:mm:ss');
-    for (var i = 0; i < results.length; i++) {
-      var r = results[i];
-      var row = Number(r.row);
-      if (!row || row < 2) continue;
-      sheet.getRange(row, 4).setValue(r.ok ? '\u2705 ENVIADO' : '\u274C ERRO');
-      sheet.getRange(row, 5).setValue(now);
-      if (r.error) sheet.getRange(row, 6).setValue(String(r.error).slice(0, 200));
-    }
-    return ContentService.createTextOutput(JSON.stringify({ ok: true, processed: results.length }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+  return ContentService.createTextOutput('Method Not Allowed')
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
 /**
