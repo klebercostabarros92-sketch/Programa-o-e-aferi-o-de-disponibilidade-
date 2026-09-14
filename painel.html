@@ -978,6 +978,12 @@ a.tbl-link:hover { text-decoration: underline; }
             <div style="font-size:12px;color:var(--text-muted);">Gera um relatório HTML completo e envia aos destinatários configurados</div>
           </div>
         </div>
+        <!-- Botão de teste -->
+        <div style="margin-bottom:10px;">
+          <button class="btn-send" style="background:#e67e00;width:100%;" onclick="enviarFlashEmail('teste')" id="btn-email-teste">
+            🔴 Enviar TESTE (só para mim)
+          </button>
+        </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn-send" style="background:var(--primary);flex:1;min-width:140px;" onclick="enviarFlashEmail('diario')" id="btn-email-diario">
             📅 Flash Diário
@@ -1498,9 +1504,9 @@ function enviarTurno(tipo) { toast('✅ Flash de '+tipo+' enviado ao Google Chat
 
 function enviarFlashEmail(periodo) {
   if(!IS_GAS){ toast('⚠️ Função disponível apenas via Google Apps Script'); return; }
-  var fnMap = { diario:'enviarFlashEmailDiario', semanal:'enviarFlashEmailSemanal', mensal:'enviarFlashEmailMensal' };
+  var fnMap = { diario:'enviarFlashEmailDiario', semanal:'enviarFlashEmailSemanal', mensal:'enviarFlashEmailMensal', teste:'enviarFlashEmailTeste' };
   var fn = fnMap[periodo]; if(!fn) return;
-  var labels = { diario:'Diário', semanal:'Semanal', mensal:'Mensal' };
+  var labels = { diario:'Diário', semanal:'Semanal', mensal:'Mensal', teste:'TESTE' };
   var btn = document.getElementById('btn-email-'+periodo);
   var status = document.getElementById('email-status');
   var origText = btn ? btn.innerHTML : '';

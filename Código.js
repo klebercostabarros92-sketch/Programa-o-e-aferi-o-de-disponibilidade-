@@ -618,6 +618,8 @@ function onOpen() {
     .addSeparator()
     .addItem('🔄 Flash Passagem de Turno (Completo)', 'executarFlashPassagemTurnoAgora')
     .addSeparator()
+    .addItem('🔴 Enviar EMAIL de TESTE (só para mim)', 'enviarFlashEmailTeste')
+    .addSeparator()
     .addItem('✉️ Email Flash Diário', 'enviarFlashEmailDiario')
     .addItem('✉️ Email Flash Semanal', 'enviarFlashEmailSemanal')
     .addItem('✉️ Email Flash Mensal', 'enviarFlashEmailMensal')

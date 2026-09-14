@@ -8,35 +8,51 @@
 // ----- Funções públicas (Menu + Painel) -----
 
 function enviarFlashEmailDiario() {
-  return _enviarFlashEmail_('DIARIO');
+  return _enviarFlashEmail_('DIARIO', false);
 }
 
 function enviarFlashEmailSemanal() {
-  return _enviarFlashEmail_('SEMANAL');
+  return _enviarFlashEmail_('SEMANAL', false);
 }
 
 function enviarFlashEmailMensal() {
-  return _enviarFlashEmail_('MENSAL');
+  return _enviarFlashEmail_('MENSAL', false);
+}
+
+// Teste: envia apenas para o remetente (você mesmo)
+function enviarFlashEmailTeste() {
+  return _enviarFlashEmail_('DIARIO', true);
 }
 
 // ----- Núcleo de envio -----
 
-function _enviarFlashEmail_(periodo) {
+function _enviarFlashEmail_(periodo, isTeste) {
   var dados = coletarDadosPassagemTurno_();
-  var html  = _montarHtmlEmail_(dados, periodo);
-  var assunto = _montarAssunto_(dados, periodo);
+  var html  = _montarHtmlEmail_(dados, periodo, isTeste);
+  var assunto = (isTeste ? '[TESTE] ' : '') + _montarAssunto_(dados, periodo);
 
-  var dest = _getEmailDestinatarios_();
+  var to, cc;
+  if (isTeste) {
+    to = Session.getEffectiveUser().getEmail();
+    cc = undefined;
+  } else {
+    var dest = _getEmailDestinatarios_();
+    to = dest.to;
+    cc = dest.cc || undefined;
+  }
 
-  GmailApp.sendEmail(dest.to, assunto, '', {
+  GmailApp.sendEmail(to, assunto, '', {
     htmlBody: html,
-    cc: dest.cc || undefined,
+    cc: cc,
     name: 'THX Group — Operações Guarulhos'
   });
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  toast_(ss, 'Email ' + periodo.toLowerCase() + ' enviado para: ' + dest.to);
-  return { ok: true, periodo: periodo, to: dest.to, cc: dest.cc };
+  var msg = isTeste
+    ? 'TESTE enviado para: ' + to
+    : 'Email ' + periodo.toLowerCase() + ' enviado para: ' + to;
+  toast_(ss, msg);
+  return { ok: true, periodo: periodo, teste: isTeste, to: to };
 }
 
 function _getEmailDestinatarios_() {
@@ -64,7 +80,7 @@ function _montarAssunto_(dados, periodo) {
 
 // ----- Montagem do HTML do email -----
 
-function _montarHtmlEmail_(dados, periodo) {
+function _montarHtmlEmail_(dados, periodo, isTeste) {
   var d   = dados || {};
   var jd  = d.jornada || {};
   var tz  = Session.getScriptTimeZone() || 'America/Sao_Paulo';
@@ -193,11 +209,17 @@ function _montarHtmlEmail_(dados, periodo) {
   var pctUtil    = frotaAtiva > 0 ? Math.round((d.programados || 0) / frotaAtiva * 100) : 0;
 
   // ====== HTML FINAL ======
+  var bannerTeste = isTeste
+    ? '<tr><td style="background:#ff9800;padding:10px 30px;text-align:center;font-size:13px;font-weight:700;color:#fff;letter-spacing:1px;">⚠️ EMAIL DE TESTE — NÃO É O ENVIO OFICIAL &nbsp;|&nbsp; Verifique o conteúdo antes de enviar para a diretoria</td></tr>'
+    : '';
+
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">' +
 
   // CONTAINER
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:20px 0;"><tr><td align="center">' +
   '<table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;">' +
+
+  bannerTeste +
 
   // HEADER
   '<tr><td style="background:#0d1b3e;padding:28px 30px;border-radius:10px 10px 0 0;">' +
@@ -306,15 +328,4 @@ function _fmtMin_(totalMin) {
   var h = Math.floor(totalMin / 60);
   var m = totalMin % 60;
   return h + ':' + (m < 10 ? '0' : '') + m;
-}
-
-// ----- Configuração dos destinatários -----
-// Execute esta função UMA VEZ para salvar os emails nas Script Properties
-function configurarEmailsFlash() {
-  var props = PropertiesService.getScriptProperties();
-  props.setProperty('FLASH_EMAIL_TO', 'erickramos@3coracoes.com.br');
-  props.setProperty('FLASH_EMAIL_CC', 'rodrigo@thxtransportes.com.br,anaerica@3coracoes.com.br,laurence@thxgroup.com.br,sidneidiniz@3coracoes.com');
-  SpreadsheetApp.getUi().alert(
-    'Emails configurados!\n\nPara: erickramos@3coracoes.com.br\n\nCópia: rodrigo@thxtransportes.com.br, anaerica@3coracoes.com.br, laurence@thxgroup.com.br, sidneidiniz@3coracoes.com'
-  );
 }
