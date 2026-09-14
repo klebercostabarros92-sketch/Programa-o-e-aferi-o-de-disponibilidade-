@@ -274,7 +274,8 @@ function reportarPlacas() {
       syncDisponibilidadeProgramadoFromProgramacao_();
     }
   } catch (e) {
-    console.warn('Erro ao sincronizar status: ' + e.message);
+    console.error('Erro ao sincronizar status Programado: ' + e);
+    SpreadsheetApp.getActive().toast('⚠️ Erro ao sincronizar Programado: ' + (e && e.message ? e.message : e), 'Sync', 10);
   }
 
   SpreadsheetApp.getUi().alert('Relatório de placas concluído! ' + sourceData.length + ' linhas processadas.');

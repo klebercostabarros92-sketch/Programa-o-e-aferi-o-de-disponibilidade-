@@ -398,8 +398,8 @@ function migrateHardcodedSecretsToProperties(input) {
   const toCreate = {};
   const legacyHardcoded = {
     CLICKUP_API_KEY: 'pk_106123901_7ST9EIKIS7QV2LTN9XZNXNMH67LR7GQ8',
-    GREENMILE_LOGIN_USERNAME: 'richardthx',
-    GREENMILE_LOGIN_PASSWORD: 'GM@thx2025',
+    GREENMILE_LOGIN_USERNAME: 'Kleberthx',
+    GREENMILE_LOGIN_PASSWORD: 'wYyB9vMaDBj8d@W',
     ATTEMICS_ACCESS_TOKEN: '669557bad8699aa536cfb9bb',
     FLASH_LAST_MILE_CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAAAtIxsN8E/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=0ykhfXhAadLLFBm3bXeSr4oGFikl8YumJ-KiXK374bs',
   };
@@ -489,6 +489,7 @@ function onOpen() {
     .addSeparator()
     .addItem('\ud83d\udce6 Processar XML agora', 'processarXmlRecebidosAgora')
     .addSeparator()
+    .addItem('🚛 Sincronizar Programado + Plano', 'menuSyncProgramadoFromProgramacao')
     .addItem('\ud83d\udee0\ufe0f Corrigir Cores (Amarelo)', 'ensureDisponibilidadeStatusValidation_');
 
   menuClickUp
@@ -9539,7 +9540,10 @@ function onEdit(e) {
         try { syncJornadaInternaFromProgramacaoRow_(sheet, r, cols); } catch (e2) {}
       }
       if (isPlacaCol || isPlanoCol || isDataSaidaCol) {
-        try { syncDisponibilidadeProgramadoFromProgramacaoRow_(sheet, r, cols, e); } catch (e2) {}
+        try { syncDisponibilidadeProgramadoFromProgramacaoRow_(sheet, r, cols, e); } catch (e2) {
+          console.error('Erro syncProgramadoRow_ r=' + r + ': ' + (e2 && e2.message ? e2.message : e2));
+          toast_(SpreadsheetApp.getActive(), '⚠️ Erro ao sincronizar Programado (linha ' + r + '): ' + (e2 && e2.message ? e2.message : e2));
+        }
       }
       if (isFaixaCol || isPlacaCol) {
         if (getClickUpProgramacaoConfig_().ENABLE_ONEDIT_JANELA_SYNC) {
@@ -10269,11 +10273,24 @@ function findPlanoByPlacaInProgramacao_(sheet, pcols, placaKey) {
   return '';
 }
 
+function menuSyncProgramadoFromProgramacao() {
+  try {
+    syncDisponibilidadeProgramadoFromProgramacao_();
+  } catch (e) {
+    SpreadsheetApp.getActive().toast('❌ Erro: ' + (e && e.message ? e.message : e), 'Sync Programado', 10);
+    console.error('menuSyncProgramadoFromProgramacao error: ' + e);
+  }
+}
+
 function syncDisponibilidadeProgramadoFromProgramacao_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const shProg = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
   const shDisp = findSheetCaseInsensitive_(ss, CFG.SHEET_DISPONIBILIDADE);
-  if (!shProg || !shDisp) return;
+  if (!shProg || !shDisp) {
+    toast_(ss, '⚠️ Programado: aba Programação ou Disponibilidade não encontrada.');
+    return;
+  }
+  toast_(ss, '🔄 Sincronizando Programado + Plano...');
   const progHeaderRow = getProgramacaoHeaderRow_();
   const progMap = mapHeaders_(shProg, progHeaderRow);
   const cProgPlanos = getHeaderColRequired_(progMap, ['PLANOS'], 'Programacao');
@@ -10282,10 +10299,16 @@ function syncDisponibilidadeProgramadoFromProgramacao_() {
   const cProgDataCarreg = getHeaderColOptional_(progMap, ['DATA DE CARREGAMENTO']);
   const progLastRow = shProg.getLastRow();
   const progLastCol = shProg.getLastColumn();
-  if (progLastRow <= progHeaderRow) return;
+  if (progLastRow <= progHeaderRow) {
+    toast_(ss, '⚠️ Programado: aba Programação está vazia (headerRow=' + progHeaderRow + ', lastRow=' + progLastRow + ').');
+    return;
+  }
   const progValues = shProg.getRange(progHeaderRow + 1, 1, progLastRow - progHeaderRow, progLastCol).getValues();
   const progDisplay = shProg.getRange(progHeaderRow + 1, 1, progLastRow - progHeaderRow, progLastCol).getDisplayValues();
   const planosByPlaca = {};
+  let progRowsComPlano = 0;
+  let progRowsSemPlano = 0;
+  let progRowsSemPlaca = 0;
   for (let i = 0; i < progValues.length; i++) {
     const rv = progValues[i] || [];
     const rd = progDisplay[i] || [];
@@ -10293,9 +10316,10 @@ function syncDisponibilidadeProgramadoFromProgramacao_() {
     const placaKeyO = normalizePlate_(rd[15 - 1] || rv[15 - 1]); // Coluna O
     const placaKeyP = normalizePlate_(rd[16 - 1] || rv[16 - 1]); // Coluna P
     
-    if (!placaKey && !placaKeyO && !placaKeyP) continue;
+    if (!placaKey && !placaKeyO && !placaKeyP) { progRowsSemPlaca++; continue; }
     const plano = String(rd[cProgPlanos - 1] || rv[cProgPlanos - 1] || '').trim();
-    if (!plano) continue;
+    if (!plano) { progRowsSemPlano++; continue; }
+    progRowsComPlano++;
     let dtRef = null;
     if (cProgDataSaida) dtRef = toDateOnly_(rv[cProgDataSaida - 1]) || parseDateBR_(rd[cProgDataSaida - 1]) || toDateOnly_(rd[cProgDataSaida - 1]);
     if (!dtRef && cProgDataCarreg) dtRef = toDateOnly_(rv[cProgDataCarreg - 1]) || parseDateBR_(rd[cProgDataCarreg - 1]) || toDateOnly_(rd[cProgDataCarreg - 1]);
@@ -10309,6 +10333,14 @@ function syncDisponibilidadeProgramadoFromProgramacao_() {
     }
   }
 
+  const totalPlacasComPlano = Object.keys(planosByPlaca).length;
+  console.log('syncProgramado: progRows=' + progValues.length + ' comPlano=' + progRowsComPlano + ' semPlano=' + progRowsSemPlano + ' semPlaca=' + progRowsSemPlaca + ' placasUnicas=' + totalPlacasComPlano);
+
+  if (progRowsComPlano === 0) {
+    toast_(ss, '⚠️ Programado: nenhuma linha na Programação tem PLANOS + PLACA preenchidos. (total=' + progValues.length + ', semPlano=' + progRowsSemPlano + ', semPlaca=' + progRowsSemPlaca + ')');
+    return;
+  }
+
   const dispHeaderRow = getDisponibilidadeHeaderRow_();
   const dispMap = mapHeaders_(shDisp, dispHeaderRow);
   const cDispData = getHeaderColOptional_(dispMap, ['DATA']);
@@ -10319,9 +10351,16 @@ function syncDisponibilidadeProgramadoFromProgramacao_() {
   const cDispPlanoFixed = 8;
   const dispLastRow = shDisp.getLastRow();
   const dispLastCol = shDisp.getLastColumn();
-  if (dispLastRow <= dispHeaderRow) return;
+  if (dispLastRow <= dispHeaderRow) {
+    toast_(ss, '⚠️ Programado: aba Disponibilidade está vazia.');
+    return;
+  }
   const dispValues = shDisp.getRange(dispHeaderRow + 1, 1, dispLastRow - dispHeaderRow, dispLastCol).getValues();
   const dispDisplay = shDisp.getRange(dispHeaderRow + 1, 1, dispLastRow - dispHeaderRow, dispLastCol).getDisplayValues();
+  let countProgramado = 0;
+  let countRevertido = 0;
+  let countSemMatch = 0;
+  let countIndisponivel = 0;
   for (let i = 0; i < dispValues.length; i++) {
     const rv = dispValues[i] || [];
     const rd = dispDisplay[i] || [];
@@ -10344,16 +10383,29 @@ function syncDisponibilidadeProgramadoFromProgramacao_() {
       if (!matchPlano) matchPlano = candidates[0].plano;
     }
     const currentStatus = cDispStatus ? String(rd[cDispStatus - 1] || rv[cDispStatus - 1] || '').trim() : '';
+    const normCurrentStatus = normalizeHeader_(currentStatus);
     if (matchPlano) {
+      // Não sobrescreve Indisponível
+      if (normCurrentStatus === normalizeHeader_('Indisponível')) {
+        countIndisponivel++;
+        continue;
+      }
       if (cDispStatus) shDisp.getRange(dispHeaderRow + 1 + i, cDispStatus).setValue('Programado');
       shDisp.getRange(dispHeaderRow + 1 + i, cDispPlano).setValue(matchPlano);
       if (cDispPlanoFixed !== cDispPlano) shDisp.getRange(dispHeaderRow + 1 + i, cDispPlanoFixed).setValue(matchPlano);
-    } else if (!currentStatus || normalizeHeader_(currentStatus) === normalizeHeader_('Programado')) {
+      countProgramado++;
+    } else if (!currentStatus || normCurrentStatus === normalizeHeader_('Programado')) {
       if (cDispStatus) shDisp.getRange(dispHeaderRow + 1 + i, cDispStatus).setValue('Disponível');
       shDisp.getRange(dispHeaderRow + 1 + i, cDispPlano).setValue('');
       if (cDispPlanoFixed !== cDispPlano) shDisp.getRange(dispHeaderRow + 1 + i, cDispPlanoFixed).setValue('');
+      countRevertido++;
+    } else {
+      countSemMatch++;
     }
   }
+  const resumo = '✅ Programado: ' + countProgramado + ' | Revertido: ' + countRevertido + ' | Indisponível(ignorado): ' + countIndisponivel + ' | Sem match: ' + countSemMatch + ' | Placas c/plano: ' + totalPlacasComPlano;
+  console.log('syncProgramado resultado: ' + resumo);
+  toast_(ss, resumo);
 }
 
 function getQuantidadeEntregasByPlano_(planoKey) {
