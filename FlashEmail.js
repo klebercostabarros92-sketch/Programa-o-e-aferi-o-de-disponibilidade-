@@ -131,7 +131,6 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
   var rowsPerfil = '';
   var mediaPorPerfil = jd.mediaPorPerfil || {};
   var perfilOrdem = ['FIORINO', 'HR/VAN', 'VUC', 'TOCO', 'CAVALO'];
-  var perfilEmoji = { 'FIORINO': '🚗', 'HR/VAN': '🚐', 'VUC': '🚛', 'TOCO': '🚚', 'CAVALO': '🔴' };
   var todosPerf = [];
   for (var pi = 0; pi < perfilOrdem.length; pi++) {
     if (mediaPorPerfil[perfilOrdem[pi]]) todosPerf.push(perfilOrdem[pi]);
@@ -143,19 +142,23 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
   for (var ti = 0; ti < todosPerf.length; ti++) {
     var pNome = todosPerf[ti];
     var pm = mediaPorPerfil[pNome];
-    var emoji = perfilEmoji[pNome] || '🚘';
     rowsPerfil +=
       '<tr style="background:' + (ti%2===0?'#f5f7fa':'#fff') + ';">' +
-      '<td style="padding:10px 14px;font-size:15px;">' + emoji + ' <strong>' + _escHtml_(pNome) + '</strong></td>' +
+      '<td style="padding:10px 14px;font-size:14px;"><strong>' + _escHtml_(pNome) + '</strong></td>' +
       '<td style="padding:10px 14px;text-align:center;font-size:22px;font-weight:700;color:#0d1b3e;">' + _fmtMin_(pm.mediaMin) + '</td>' +
-      '<td style="padding:10px 14px;text-align:center;color:#777;font-size:13px;">' + pm.count + ' veíc.</td>' +
+      '<td style="padding:10px 14px;text-align:center;color:#777;font-size:13px;">' + pm.count + ' veic.</td>' +
       '</tr>';
   }
   if (!rowsPerfil) rowsPerfil = '<tr><td colspan="3" style="padding:10px;color:#aaa;text-align:center;font-style:italic;">Sem dados por perfil</td></tr>';
 
+  // Indicadores coloridos (CSS, sem emoji)
+  var dotVerde    = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#27ae60;margin-right:5px;"></span>';
+  var dotAmarelo  = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f39c12;margin-right:5px;"></span>';
+  var dotVermelho = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e74c3c;margin-right:5px;"></span>';
+
   // ====== HTML FINAL ======
   var bannerTeste = isTeste
-    ? '<tr><td style="background:#ff9800;padding:10px 30px;text-align:center;font-size:13px;font-weight:700;color:#fff;letter-spacing:1px;">⚠️ EMAIL DE TESTE — NÃO É O ENVIO OFICIAL &nbsp;|&nbsp; Verifique antes de enviar para a diretoria</td></tr>'
+    ? '<tr><td style="background:#e67e00;padding:10px 30px;text-align:center;font-size:13px;font-weight:700;color:#fff;letter-spacing:1px;">[TESTE] Este email NAO e o envio oficial — verifique o conteudo antes de enviar para a diretoria</td></tr>'
     : '';
 
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">' +
@@ -169,16 +172,16 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
   '<tr><td style="background:#0d1b3e;padding:28px 30px;border-radius:12px 12px 0 0;">' +
   '<span style="color:#fff;font-size:24px;font-weight:700;letter-spacing:1px;">THX GROUP</span><br>' +
   '<span style="color:#7eb3f5;font-size:13px;">Operações Guarulhos — Café 3 Corações</span><br><br>' +
-  '<span style="background:#1a4a8a;color:#fff;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:700;">🏭 Jornada Interna — Flash ' + _escHtml_(labelPeriodo) + '</span>' +
-  '<div style="margin-top:10px;color:#aac8f0;font-size:12px;">📅 ' + _escHtml_(periodoStr) + ' &nbsp;|&nbsp; 🕒 ' + _escHtml_(d.horaAtual || '') + '</div>' +
+  '<span style="background:#1a4a8a;color:#fff;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:700;">Jornada Interna — Flash ' + _escHtml_(labelPeriodo) + '</span>' +
+  '<div style="margin-top:10px;color:#aac8f0;font-size:12px;">Periodo: ' + _escHtml_(periodoStr) + ' &nbsp;|&nbsp; Gerado: ' + _escHtml_(d.horaAtual || '') + '</div>' +
   '</td></tr>' +
 
   // MÉTRICAS PRINCIPAIS
   '<tr><td style="background:#1a4a8a;padding:18px 30px;">' +
   '<table width="100%" cellpadding="0" cellspacing="0"><tr>' +
-  _cardMetrica_('✅ Finalizados', jd.carregadosLiberados || 0) +
-  _cardMetrica_('⏳ Em Carga', jd.emCarregamento || 0) +
-  _cardMetrica_('⏱️ Tempo Médio', tempoMedioStr) +
+  _cardMetrica_('Finalizados', jd.carregadosLiberados || 0) +
+  _cardMetrica_('Em Carga', jd.emCarregamento || 0) +
+  _cardMetrica_('Tempo Medio', tempoMedioStr) +
   '</tr></table>' +
   '</td></tr>' +
 
@@ -188,40 +191,49 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
   // Classificação — barra visual
   (stats.total > 0 ? (
     '<div style="margin-bottom:24px;">' +
-    '<div style="font-size:14px;font-weight:700;color:#0d1b3e;margin-bottom:10px;">📈 Classificação da Jornada (' + stats.total + ' veículos)</div>' +
-    '<div style="display:flex;border-radius:6px;overflow:hidden;height:20px;margin-bottom:10px;">' +
-    '<div style="width:' + pNormal  + '%;background:#2ecc71;" title="Normal"></div>' +
-    '<div style="width:' + pMedio   + '%;background:#f39c12;" title="Médio"></div>' +
-    '<div style="width:' + pCritico + '%;background:#e74c3c;" title="Crítico"></div>' +
-    '</div>' +
+    '<div style="font-size:14px;font-weight:700;color:#0d1b3e;border-left:4px solid #1a4a8a;padding-left:10px;margin-bottom:12px;">Classificacao da Jornada (' + stats.total + ' veiculos)</div>' +
+    '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr>' +
+    '<td style="background:#2ecc71;height:14px;width:' + pNormal  + '%;border-radius:' + (pNormal>0?'4px':'0') + ' 0 0 4px;"></td>' +
+    '<td style="background:#f39c12;height:14px;width:' + pMedio   + '%;"></td>' +
+    '<td style="background:#e74c3c;height:14px;width:' + pCritico + '%;border-radius:0 4px 4px 0;"></td>' +
+    '</tr></table>' +
     '<table width="100%" cellpadding="0" cellspacing="0"><tr>' +
-    '<td style="text-align:center;padding:8px;background:#f0fff4;border-radius:6px;margin:2px;"><span style="color:#27ae60;font-size:22px;font-weight:700;">' + pNormal + '%</span><br><span style="font-size:11px;color:#555;">🟢 Normal<br>(' + stats.normal + ')</span></td>' +
+    '<td style="text-align:center;padding:10px 6px;background:#f0fff4;border-radius:6px;border:1px solid #c3e6cb;">' +
+      '<div style="font-size:26px;font-weight:700;color:#27ae60;">' + pNormal + '%</div>' +
+      '<div style="font-size:11px;color:#555;margin-top:2px;">' + dotVerde + 'Normal (' + stats.normal + ')</div>' +
+    '</td>' +
     '<td width="8"></td>' +
-    '<td style="text-align:center;padding:8px;background:#fffde7;border-radius:6px;"><span style="color:#e67e22;font-size:22px;font-weight:700;">' + pMedio + '%</span><br><span style="font-size:11px;color:#555;">🟡 Médio<br>(' + stats.medio + ')</span></td>' +
+    '<td style="text-align:center;padding:10px 6px;background:#fffde7;border-radius:6px;border:1px solid #ffe082;">' +
+      '<div style="font-size:26px;font-weight:700;color:#e67e22;">' + pMedio + '%</div>' +
+      '<div style="font-size:11px;color:#555;margin-top:2px;">' + dotAmarelo + 'Medio (' + stats.medio + ')</div>' +
+    '</td>' +
     '<td width="8"></td>' +
-    '<td style="text-align:center;padding:8px;background:#fff0f0;border-radius:6px;"><span style="color:#e74c3c;font-size:22px;font-weight:700;">' + pCritico + '%</span><br><span style="font-size:11px;color:#555;">🔴 Crítico<br>(' + stats.critico + ')</span></td>' +
+    '<td style="text-align:center;padding:10px 6px;background:#fff0f0;border-radius:6px;border:1px solid #f5c6cb;">' +
+      '<div style="font-size:26px;font-weight:700;color:#e74c3c;">' + pCritico + '%</div>' +
+      '<div style="font-size:11px;color:#555;margin-top:2px;">' + dotVermelho + 'Critico (' + stats.critico + ')</div>' +
+    '</td>' +
     '</tr></table></div>'
   ) : '') +
 
   // Média por perfil
-  '<div style="font-size:14px;font-weight:700;color:#0d1b3e;margin-bottom:10px;">📊 Tempo Médio por Tipo de Veículo</div>' +
-  '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8eaf0;border-radius:8px;overflow:hidden;margin-bottom:24px;">' +
-  '<tr style="background:#0d1b3e;"><th style="padding:9px 14px;color:#fff;font-size:12px;text-align:left;">Tipo</th><th style="padding:9px;color:#fff;font-size:12px;text-align:center;">Média</th><th style="padding:9px;color:#fff;font-size:12px;text-align:center;">Qtd</th></tr>' +
+  '<div style="font-size:14px;font-weight:700;color:#0d1b3e;border-left:4px solid #1a4a8a;padding-left:10px;margin-bottom:12px;">Tempo Medio por Tipo de Veiculo</div>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dde0e8;border-radius:8px;overflow:hidden;margin-bottom:24px;">' +
+  '<tr style="background:#0d1b3e;"><th style="padding:9px 14px;color:#fff;font-size:12px;text-align:left;">Tipo de Veiculo</th><th style="padding:9px;color:#fff;font-size:12px;text-align:center;">Tempo Medio</th><th style="padding:9px;color:#fff;font-size:12px;text-align:center;">Qtd</th></tr>' +
   rowsPerfil + '</table>' +
 
   // Em carregamento (se houver)
   (rowsEmCarg ? (
-    '<div style="font-size:14px;font-weight:700;color:#e67e22;margin-bottom:8px;">⏳ Ainda em Carregamento</div>' +
+    '<div style="font-size:14px;font-weight:700;color:#c87000;border-left:4px solid #f39c12;padding-left:10px;margin-bottom:12px;">Ainda em Carregamento</div>' +
     '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #ffe082;border-radius:8px;overflow:hidden;margin-bottom:10px;">' +
     '<tr style="background:#f9a825;"><th style="padding:8px 10px;color:#fff;font-size:12px;text-align:left;">Placa</th><th style="padding:8px;color:#fff;font-size:12px;text-align:left;">Motorista</th></tr>' +
     rowsEmCarg + '</table>'
-  ) : '<div style="background:#f0fff4;border-radius:8px;padding:12px 16px;text-align:center;color:#27ae60;font-size:13px;">✅ Todos os veículos finalizaram o carregamento</div>') +
+  ) : '<div style="background:#f0fff4;border-radius:8px;padding:12px 16px;text-align:center;color:#27ae60;font-size:13px;border:1px solid #c3e6cb;">Todos os veiculos finalizaram o carregamento</div>') +
 
   '</td></tr>' +
 
   // FOOTER
   '<tr><td style="background:#0d1b3e;padding:14px 30px;border-radius:0 0 12px 12px;text-align:center;">' +
-  '<span style="color:#7eb3f5;font-size:11px;">THX Group · Guarulhos &nbsp;|&nbsp; Gerado automaticamente via Google Apps Script</span>' +
+  '<span style="color:#7eb3f5;font-size:11px;">THX Group — Guarulhos &nbsp;|&nbsp; Gerado automaticamente via Google Apps Script</span>' +
   '</td></tr>' +
 
   '</table></td></tr></table></body></html>';
@@ -233,25 +245,6 @@ function _cardMetrica_(label, valor) {
   return '<td align="center" style="padding:6px 4px;">' +
     '<div style="background:rgba(255,255,255,0.13);border-radius:10px;padding:12px 8px;min-width:100px;">' +
     '<div style="color:rgba(255,255,255,0.7);font-size:11px;margin-bottom:6px;">' + label + '</div>' +
-    '<div style="color:#ffffff;font-size:24px;font-weight:700;line-height:1;">' + valor + '</div>' +
+    '<div style="color:#ffffff;font-size:24px;font-weight:700;">' + valor + '</div>' +
     '</div></td>';
-}
-
-function _secTitle_(text) {
-  return '<div style="font-size:15px;font-weight:700;color:#0d1b3e;margin:0 0 8px;padding-bottom:6px;border-bottom:2px solid #1a4a8a;">' + text + '</div>';
-}
-
-function _escHtml_(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function _normStr_(s) {
-  return String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Z0-9]/g,'');
-}
-
-function _fmtMin_(totalMin) {
-  if (!totalMin || totalMin <= 0) return '--:--';
-  var h = Math.floor(totalMin / 60);
-  var m = totalMin % 60;
-  return h + ':' + (m < 10 ? '0' : '') + m;
 }
