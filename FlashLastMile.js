@@ -621,7 +621,7 @@ function getFlashLastMileConfig_() {
     TRIGGER_FN: 'monitorarAtualizacaoFlashLastMile',
     SEND_CHAT_ON_UPDATE: true,
     CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAQAgYbz-m4/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=n9uEx-TRY0yDAqX0rE9Uvn5TYCqbRjleiAVNFlVTkPk',
-    DASHBOARD_URL: 'https://script.google.com/macros/s/AKfycbwobdqlQgKxsXBapDjo7qp0Sdk33xadB-Woa6floFU6dnSkdOhf5omR80xLbBEGkVNOiA/exec',
+    DASHBOARD_URL: 'https://script.google.com/macros/s/AKfycbwbZ5DQcLSfmFC_amDReIk94wD1qXb_1rDza8sRwK1Dc30Tkw40pKIMshKdykagYHWxKA/exec',
     CHAT_IMAGE_FOLDER: 'FLASH_LAST_MILE_CHAT'
   };
 }
