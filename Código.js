@@ -4102,15 +4102,7 @@ function ensureProgramacaoLogSheet_(ss) {
  * A ordem define a sequência das colunas na planilha.
  */
 function getProgramacaoLogHeaders_() {
-  return [
-    'Plano',
-    'Placa',
-    'Perfil',
-    'Zona',
-    'Data do carregamento',
-    'Motorista',
-    'Quantidade de entregas',
-  ];
+  return ['Plano', 'Placa', 'Perfil', 'Zona', 'Data do carregamento', 'Motorista', 'Quantidade de entregas'];
 }
 
 /**
@@ -4118,28 +4110,17 @@ function getProgramacaoLogHeaders_() {
  * A aba é protegida contra edição manual e a linha de cabeçalho fica congelada.
  */
 function ensureProgramacaoLogSheet_(ss) {
-  const sheetName = (CONFIG.PROGRAMACAO_LOG && CONFIG.PROGRAMACAO_LOG.SHEET_NAME) || 'Log_programa\u00e7\u00e3o';
-  let sheet = findSheetCaseInsensitive_(ss, sheetName);
-  if (!sheet) sheet = ss.insertSheet(sheetName);
-
+  const workbook = ss || SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = getProgramacaoLogSheetName_();
+  let sheet = workbook.getSheetByName(sheetName) || findSheetCaseInsensitive_(workbook, sheetName);
+  if (!sheet) sheet = workbook.insertSheet(sheetName);
   const headers = getProgramacaoLogHeaders_();
-  const maxCols = sheet.getMaxColumns();
-  if (maxCols < headers.length) sheet.insertColumnsAfter(maxCols, headers.length - maxCols);
-  ensureHeaders_(sheet, headers, 1);
-  if (sheet.getMaxColumns() > headers.length) sheet.deleteColumns(headers.length + 1, sheet.getMaxColumns() - headers.length);
-
-  try {
-    sheet.setFrozenRows(1);
-    sheet.setRowHeight(1, 28);
-    sheet.getRange(1, 1, 1, headers.length)
-      .setFontWeight('bold')
-      .setBackground('#1a73e8')
-      .setFontColor('#ffffff')
-      .setHorizontalAlignment('center')
-      .setWrap(false);
-    [120,100,110,120,150,170,150].forEach(function(width, i) { sheet.setColumnWidth(i + 1, width); });
-  } catch (e) {}
-
+  const current = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+  const hasHeader = current.some(function(v) { return String(v || '').trim(); });
+  const same = headers.every(function(h, i) { return String(current[i] || '').trim() === h; });
+  if (!hasHeader || sheet.getLastRow() <= 1) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  else if (!same) throw new Error('Aba Log_programacao com cabecalho diferente. Ajuste manualmente antes de sincronizar.');
+  try { sheet.setFrozenRows(1); sheet.setRowHeight(1, 28); sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setWrap(false); [120,100,110,120,150,170,150].forEach(function(w, i) { sheet.setColumnWidth(i + 1, w); }); } catch (e) {}
   return sheet;
 }
 
@@ -4151,27 +4132,16 @@ function setupProgramacaoLog() {
 
 function buildProgramacaoLogDedupeHash_(rowCtx) {
   const row = rowCtx || {};
-  return [
-    row.plano || '',
-    normalizePlate_(row.placa || ''),
-    row.perfil || '',
-    row.regiao || '',
-    row.dataCarregamento || '',
-    row.motorista || '',
-    row.entregas || '',
-  ].map(function (v) { return normalizeHeader_(v); }).join('|');
+  return [row.plano || '', normalizePlate_(row.placa || ''), row.dataCarregamento || ''].map(function(v) { return normalizeHeader_(v); }).join('|');
 }
 
 function getProgramacaoLogExistingKeys_(sheet) {
-  const lastRow = sheet.getLastRow();
   const out = { byHash: {} };
+  const lastRow = sheet.getLastRow();
   if (lastRow < 2) return out;
   const values = sheet.getRange(2, 1, lastRow - 1, getProgramacaoLogHeaders_().length).getDisplayValues();
   for (let i = 0; i < values.length; i++) {
-    const hash = buildProgramacaoLogDedupeHash_({
-      plano: values[i][0], placa: values[i][1], perfil: values[i][2], regiao: values[i][3],
-      dataCarregamento: values[i][4], motorista: values[i][5], entregas: values[i][6],
-    });
+    const hash = buildProgramacaoLogDedupeHash_({ plano: values[i][0], placa: values[i][1], dataCarregamento: values[i][4] });
     if (hash) out.byHash[hash] = true;
   }
   return out;
@@ -4179,24 +4149,39 @@ function getProgramacaoLogExistingKeys_(sheet) {
 
 function maybeAppendProgramacaoLogFromClickUpCreation_(ss, rowCtx, meta) {
   const row = rowCtx || {};
-  const hash = buildProgramacaoLogDedupeHash_(row);
-  if (!hash) return false;
   const sheet = ensureProgramacaoLogSheet_(ss || SpreadsheetApp.getActiveSpreadsheet());
   const existing = getProgramacaoLogExistingKeys_(sheet);
-  if (existing.byHash[hash]) return false;
-
-  const logRow = {
-    'Plano': row.plano || '',
-    'Placa': row.placa || '',
-    'Perfil': row.perfil || '',
-    'Zona': row.regiao || '',
-    'Data do carregamento': row.dataCarregamento || '',
-    'Motorista': row.motorista || '',
-    'Quantidade de entregas': row.entregas || '',
-  };
-  const headers = getProgramacaoLogHeaders_();
-  sheet.appendRow(headers.map(function (h) { return logRow[h] || ''; }));
+  const hash = buildProgramacaoLogDedupeHash_(row);
+  if (!row.plano || existing.byHash[hash]) return false;
+  existing.byHash[hash] = true;
+  sheet.appendRow([row.plano || '', row.placa || '', row.perfil || '', row.regiao || '', row.dataCarregamento || '', row.motorista || '', row.entregas || '']);
   return true;
+}
+
+function getQuantidadeEntregasByPlanoFonte_() {
+  const sourceSs = SpreadsheetApp.openById(CONFIG.SOURCE_SPREADSHEET_ID);
+  const sourceSheet = sourceSs.getSheetByName(CONFIG.SOURCE_SHEET_NAME);
+  if (!sourceSheet) throw new Error('Aba fonte nao encontrada: ' + CONFIG.SOURCE_SHEET_NAME);
+  const values = sourceSheet.getDataRange().getDisplayValues();
+  if (!values.length) return {};
+  const headerInfo = findHeaderInfo_(values), header = values[headerInfo.headerRow] || [], hMap = new Map(), out = {};
+  for (let c = 0; c < header.length; c++) { const h = String(header[c] || ''); if (!h) continue; hMap.set(normalizeHeader_(h), c + 1); hMap.set(normHeader_(h), c + 1); }
+  const cPlano = getHeaderColRequired_(hMap, ['PLANOS'], 'Fonte');
+  for (let i = Math.max(headerInfo.headerRow + 1, 2); i < values.length; i++) { const r = values[i] || [], key = normalizePlanoDigitsKey_(r[cPlano - 1]); if (!key || out[key] != null) continue; out[key] = String(r[12] || '').trim(); }
+  return out;
+}
+
+function sincronizarLogProgramacao() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet(), shProg = findSheetCaseInsensitive_(ss, CONFIG.SHEET_PROGRAMACAO);
+  if (!shProg) throw new Error('Aba Programacao nao encontrada.');
+  const logSheet = ensureProgramacaoLogSheet_(ss), headerRow = getProgramacaoHeaderRow_(), hMap = mapHeaders_(shProg, headerRow);
+  const cPlano = getHeaderColRequired_(hMap, ['PLANOS'], 'Programacao'), cPlaca = getHeaderColRequired_(hMap, ['PLACA'], 'Programacao'), cMotorista = getHeaderColRequired_(hMap, ['MOTORISTA'], 'Programacao');
+  const cPerfil = getHeaderColOptional_(hMap, ['PERFIL']), cZona = getHeaderColOptional_(hMap, ['ZONA']), cData = getHeaderColOptional_(hMap, ['DATA DE CARREGAMENTO']), cQtd = getHeaderColOptional_(hMap, ['QUANTIDADE DE ENTREGAS', 'QTD ENTREGAS', 'ENTREGAS']);
+  const rows = getSheetDataRowsDisplay_(shProg, shProg.getLastColumn(), headerRow), qtdByPlano = getQuantidadeEntregasByPlanoFonte_(), existing = getProgramacaoLogExistingKeys_(logSheet), out = [];
+  for (let i = 0; i < rows.length; i++) { const r = rows[i] || [], plano = String(r[cPlano - 1] || '').trim(); if (!plano) continue; const key = normalizePlanoDigitsKey_(plano); const linha = [plano, String(r[cPlaca - 1] || '').trim(), cPerfil ? String(r[cPerfil - 1] || '').trim() : '', cZona ? String(r[cZona - 1] || '').trim() : '', cData ? String(r[cData - 1] || '').trim() : '', String(r[cMotorista - 1] || '').trim(), key && qtdByPlano[key] != null ? qtdByPlano[key] : (cQtd ? String(r[cQtd - 1] || '').trim() : '')]; const hash = buildProgramacaoLogDedupeHash_({ plano: linha[0], placa: linha[1], dataCarregamento: linha[4] }); if (existing.byHash[hash]) continue; existing.byHash[hash] = true; out.push(linha); }
+  if (out.length) logSheet.getRange(logSheet.getLastRow() + 1, 1, out.length, getProgramacaoLogHeaders_().length).setValues(out);
+  toast_(ss, 'Log_programacao: adicionadas=' + out.length);
+  return { ok: true, data: { added: out.length, rows: rows.length } };
 }
 
 function normalizeInvoiceValueClickUpProgramacao_(rawValue) {
