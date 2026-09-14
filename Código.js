@@ -639,6 +639,7 @@ function onOpen() {
     .addItem('✉️ Solicitar inclusão GM7', 'enviarSolicitacaoInclusaoGM7')
     .addItem('Quantidade de entregas', 'inserirQuantidadeEntregasProgramacao')
     .addItem('✉️ Cobrar XML', 'cobrarXmlProgramacaoPorEmail')
+    .addItem('✉️ Cobrar XML novos planos', 'cobrarXmlNovosPlanosProgramacaoPorEmail')
     .addSeparator()
     .addItem('\ud83d\udce6 Processar XML agora', 'processarXmlRecebidosAgora')
     .addSeparator()
@@ -705,6 +706,16 @@ function atualizarPlanilhas3Coracoes() {
 }
 
 function cobrarXmlProgramacaoPorEmail() {
+  return cobrarXmlProgramacaoPorEmail_({ onlyNew: false });
+}
+
+function cobrarXmlNovosPlanosProgramacaoPorEmail() {
+  return cobrarXmlProgramacaoPorEmail_({ onlyNew: true });
+}
+
+function cobrarXmlProgramacaoPorEmail_(options) {
+  const opts = options || {};
+  const onlyNew = opts.onlyNew === true;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
   if (!sh) throw new Error('Aba Programacao nao encontrada.');
@@ -719,6 +730,7 @@ function cobrarXmlProgramacaoPorEmail() {
 
   const rows = getSheetDataRowsDisplay_(sh, sh.getLastColumn(), headerRow);
   const today = toDateOnly_(new Date());
+  const dataRefTxt = Utilities.formatDate(today, Session.getScriptTimeZone(), 'dd/MM/yyyy');
   const items = [];
   const seen = {};
 
@@ -740,17 +752,32 @@ function cobrarXmlProgramacaoPorEmail() {
 
     items.push({
       plano: plano,
+      key: key,
+      rowNumber: headerRow + 1 + i,
       complemento: cComp ? String(r[cComp - 1] || '').trim() : '',
       perfil: cPerfil ? String(r[cPerfil - 1] || '').trim() : '',
     });
   }
 
-  if (!items.length) {
-    toast_(ss, 'XML: nenhum plano elegivel para hoje.');
-    return { ok: true, data: { sent: false, rows: 0 } };
+  let filteredItems = items;
+  let chargedKeys = {};
+  if (onlyNew) {
+    chargedKeys = getXmlCobrancaChargedKeysForDate_(dataRefTxt);
+    filteredItems = items.filter(function (item) {
+      const k = String(item && item.key || '').trim();
+      return k && !chargedKeys[k];
+    });
   }
 
-  items.sort(function (a, b) {
+  if (!filteredItems.length) {
+    const msg = onlyNew
+      ? 'XML: nenhum plano novo para cobrar hoje.'
+      : 'XML: nenhum plano elegivel para hoje.';
+    toast_(ss, msg);
+    return { ok: true, data: { sent: false, rows: 0, totalElegivel: items.length, onlyNew: onlyNew } };
+  }
+
+  filteredItems.sort(function (a, b) {
     const pa = normalizeHeader_(a.perfil || '');
     const pb = normalizeHeader_(b.perfil || '');
     if (pa !== pb) return pa < pb ? -1 : 1;
@@ -762,14 +789,23 @@ function cobrarXmlProgramacaoPorEmail() {
   const to = String(cfg.TO || '').trim() || executorEmail;
   if (!to) throw new Error('Nao foi possivel identificar destinatario (TO) nem usuario executor.');
 
-  const dataRefTxt = Utilities.formatDate(today, Session.getScriptTimeZone(), 'dd/MM/yyyy');
-  const subject = String(cfg.SUBJECT_PREFIX || 'XML').trim() + ' ' + dataRefTxt;
-  const htmlBody = buildXmlCobrancaEmailHtml_(items, {
+  const subjectPrefix = String(cfg.SUBJECT_PREFIX || 'XML').trim();
+  const subject = subjectPrefix + (onlyNew ? ' - novos planos ' : ' ') + dataRefTxt;
+  const htmlBody = buildXmlCobrancaEmailHtml_(filteredItems, {
     dataRefTxt: dataRefTxt,
     executorEmail: executorEmail,
     sheetName: sh.getName(),
+    onlyNew: onlyNew,
+    totalElegivel: items.length,
+    jaCobrados: Object.keys(chargedKeys || {}).length,
   });
-  const textBody = buildXmlCobrancaEmailText_(items, dataRefTxt, executorEmail);
+  const textBody = buildXmlCobrancaEmailText_(filteredItems, {
+    dataRefTxt: dataRefTxt,
+    executorEmail: executorEmail,
+    onlyNew: onlyNew,
+    totalElegivel: items.length,
+    jaCobrados: Object.keys(chargedKeys || {}).length,
+  });
 
   const mailOpts = {
     htmlBody: htmlBody,
@@ -779,8 +815,111 @@ function cobrarXmlProgramacaoPorEmail() {
   if (cfg.BCC) mailOpts.bcc = String(cfg.BCC).trim();
 
   GmailApp.sendEmail(to, subject, textBody, mailOpts);
-  toast_(ss, 'XML: e-mail enviado (' + items.length + ' planos).');
-  return { ok: true, data: { sent: true, rows: items.length, to: to, subject: subject } };
+  appendXmlCobrancaLog_(filteredItems, {
+    dataRefTxt: dataRefTxt,
+    mode: onlyNew ? 'NOVOS_PLANOS' : 'COMPLETA',
+    to: to,
+    subject: subject,
+    executorEmail: executorEmail,
+  });
+
+  toast_(ss, 'XML: e-mail enviado (' + filteredItems.length + ' planos' + (onlyNew ? ' novos' : '') + ').');
+  return {
+    ok: true,
+    data: {
+      sent: true,
+      rows: filteredItems.length,
+      totalElegivel: items.length,
+      alreadyChargedToday: Object.keys(chargedKeys || {}).length,
+      onlyNew: onlyNew,
+      to: to,
+      subject: subject,
+    },
+  };
+}
+
+function getXmlCobrancaLogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const name = 'LOG_XML_COBRANCA';
+  let sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+
+  const headers = [
+    'Cobranca em',
+    'Data referencia',
+    'Modo',
+    'Plano',
+    'Plano key',
+    'Complemento',
+    'Perfil',
+    'Linha Programacao',
+    'Destinatario',
+    'Assunto',
+    'Executor',
+  ];
+
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+  } else {
+    const current = sh.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+    let needsHeader = false;
+    for (let i = 0; i < headers.length; i++) {
+      if (String(current[i] || '') !== headers[i]) {
+        needsHeader = true;
+        break;
+      }
+    }
+    if (needsHeader) sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+
+  try {
+    sh.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e2e8f0');
+    sh.autoResizeColumns(1, headers.length);
+  } catch (e) {}
+
+  return sh;
+}
+
+function getXmlCobrancaChargedKeysForDate_(dataRefTxt) {
+  const out = {};
+  const sh = getXmlCobrancaLogSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return out;
+
+  const values = sh.getRange(2, 1, lastRow - 1, 11).getDisplayValues();
+  const target = String(dataRefTxt || '').trim();
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i] || [];
+    const ref = String(r[1] || '').trim();
+    const key = String(r[4] || '').trim();
+    if (ref === target && key) out[key] = true;
+  }
+  return out;
+}
+
+function appendXmlCobrancaLog_(items, ctx) {
+  const list = items || [];
+  if (!list.length) return;
+
+  const sh = getXmlCobrancaLogSheet_();
+  const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+  const rows = list.map(function (item) {
+    return [
+      now,
+      String((ctx && ctx.dataRefTxt) || ''),
+      String((ctx && ctx.mode) || ''),
+      String(item.plano || ''),
+      String(item.key || ''),
+      String(item.complemento || ''),
+      String(item.perfil || ''),
+      String(item.rowNumber || ''),
+      String((ctx && ctx.to) || ''),
+      String((ctx && ctx.subject) || ''),
+      String((ctx && ctx.executorEmail) || ''),
+    ];
+  });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
 function getXmlRecebimentoConfig_() {
@@ -2253,11 +2392,21 @@ function extractExpectedNfsFromNotaFiscal_(value) {
   return out;
 }
 
-function buildXmlCobrancaEmailText_(items, dataRefTxt, executorEmail) {
+function buildXmlCobrancaEmailText_(items, ctxOrDataRefTxt, maybeExecutorEmail) {
+  const ctx = (ctxOrDataRefTxt && typeof ctxOrDataRefTxt === 'object') ? ctxOrDataRefTxt : {
+    dataRefTxt: ctxOrDataRefTxt,
+    executorEmail: maybeExecutorEmail,
+  };
+  const dataRefTxt = String((ctx && ctx.dataRefTxt) || '');
+  const executorEmail = String((ctx && ctx.executorEmail) || '');
+  const onlyNew = !!(ctx && ctx.onlyNew);
+  const totalElegivel = Number((ctx && ctx.totalElegivel) || 0);
+  const jaCobrados = Number((ctx && ctx.jaCobrados) || 0);
   const lines = [];
   lines.push('Boa tarde!');
   lines.push('');
-  lines.push('Solicito XML dos planos (' + dataRefTxt + '):');
+  lines.push('Solicito XML dos planos (' + dataRefTxt + ')' + (onlyNew ? ' que entraram apos a cobranca anterior:' : ':'));
+  if (onlyNew) lines.push('Resumo: ' + (items || []).length + ' novo(s) | ' + totalElegivel + ' elegivel(is) hoje | ' + jaCobrados + ' ja cobrado(s)');
   lines.push('');
   lines.push('PLANOS | COMPLEMENTO | PERFIL +/-');
   lines.push('----------------------------------');
@@ -2276,6 +2425,9 @@ function buildXmlCobrancaEmailText_(items, dataRefTxt, executorEmail) {
 function buildXmlCobrancaEmailHtml_(items, ctx) {
   const dataRefTxt = String((ctx && ctx.dataRefTxt) || '');
   const executorEmail = String((ctx && ctx.executorEmail) || '');
+  const onlyNew = !!(ctx && ctx.onlyNew);
+  const totalElegivel = Number((ctx && ctx.totalElegivel) || 0);
+  const jaCobrados = Number((ctx && ctx.jaCobrados) || 0);
   const total = (items || []).length;
   const rowsHtml = (items || []).map(function (it, idx) {
     const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
@@ -2291,9 +2443,10 @@ function buildXmlCobrancaEmailHtml_(items, ctx) {
   return (
     '<div style="font-family:Arial,sans-serif;color:#111827;max-width:860px;">' +
       '<div style="margin-bottom:14px;font-size:14px;">Boa tarde!</div>' +
-      '<div style="margin-bottom:16px;font-size:14px;">Solicito <b>XML</b> dos planos da data <b>' + escapeHtml_(dataRefTxt) + '</b>.</div>' +
+      '<div style="margin-bottom:16px;font-size:14px;">Solicito <b>XML</b> dos planos da data <b>' + escapeHtml_(dataRefTxt) + '</b>' + (onlyNew ? ' que entraram apos a cobranca anterior.' : '.') + '</div>' +
       '<div style="margin-bottom:10px;padding:10px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:13px;color:#1e3a8a;">' +
         '<b>Resumo</b>: ' + total + ' plano(s) na cobranca' +
+        (onlyNew ? ' | ' + totalElegivel + ' elegivel(is) hoje | ' + jaCobrados + ' ja cobrado(s)' : '') +
       '</div>' +
       '<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;max-width:760px;">' +
         '<thead>' +
