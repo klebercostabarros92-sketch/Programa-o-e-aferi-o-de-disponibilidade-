@@ -1342,7 +1342,7 @@ function renderJornada(f={}) {
   document.getElementById('j-saiu').textContent=saiu;
   document.getElementById('j-carr').textContent=carr;
   document.getElementById('j-naoinic').textContent=naoi;
-  document.getElementById('j-media').textContent=durs.length?`${medH}h${String(medM).padStart(2,'0')}':'—'`;
+  document.getElementById('j-media').textContent=durs.length?`${medH}h${String(medM).padStart(2,'0')}`:'—';
   document.getElementById('jorn-ref').textContent=DATA_REF;
   const classLbl=c=>c==='Normal'?lbl('Normal','green'):c==='Demora leve'?lbl('Demora','yellow'):c==='Em andamento'?lbl('Andamento','blue'):lbl(c||'—','gray');
   document.getElementById('tb-jorn').innerHTML=rows.length?rows.map((r,i)=>`<tr>
@@ -1563,15 +1563,14 @@ function recarregarDados() {
   }
 }
 
+
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 renderDash();
 
 if(IS_GAS){
-  // Carregar dados reais da planilha ao abrir
-  setTimeout(carregarTodos, 200);
-  // Auto-refresh a cada 90 segundos
+  setTimeout(carregarTodos, 300);
   setInterval(function(){
     if(!document.hidden) carregarTodos();
   }, 90000);
