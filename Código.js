@@ -3913,15 +3913,23 @@ function runAtualizarDisponibilidadeClickUp_(options) {
     });
 
     ctx.step = 'fetch_clickup';
-    // Otimização Crítica: Filtrando por Tags e Status diretamente na API para evitar processar 8000+ tarefas
+    // Otimização Crítica: Filtrando em minúsculas para máxima compatibilidade com a API
+    const apiStatuses = [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO]
+      .filter(Boolean)
+      .map(function(s) { return s.toLowerCase(); });
+    const apiTags = [CONFIG.CLICKUP.UNIDADE_ALVO]
+      .filter(Boolean)
+      .map(function(t) { return t.toLowerCase(); });
+
     const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, {
       debug: debug,
-      statuses: [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO].filter(Boolean),
-      tags: [CONFIG.CLICKUP.UNIDADE_ALVO].filter(Boolean)
+      statuses: apiStatuses,
+      tags: apiTags
     });
     if (debug) {
-      appDebugPrint_('[DEBUG] ClickUp tasks filtradas baixadas', {
-        total: tasks.length,
+      appDebugPrint_('[DEBUG] ClickUp filtragem API concluida', {
+        solicitado: { statuses: apiStatuses, tags: apiTags },
+        totalRecebido: tasks.length,
       });
     }
     const parsed = tasks.map(parseClickUpTaskDisponibilidade_).filter(Boolean);
@@ -4981,16 +4989,32 @@ function filtrarMotoristasDisponibilidade_(items) {
     const unitMatch = unidade === unitTarget || tags.indexOf(unitTarget) !== -1;
     const statusMatch = status === s1 || (s2 && status === s2);
 
-    if (debug && unitMatch && statusMatch) {
-    appDebugPrint_('[MATCH] Motorista alvo encontrado', {
-      nome: item.motorista,
-      placa: item.placa,
-      unidade: item.unidade,
-      status: item.status
-    });
-  }
+    if (debug) {
+      if (unitMatch && statusMatch) {
+        appDebugPrint_('[MATCH] Motorista alvo encontrado', {
+          nome: item.motorista,
+          placa: item.placa,
+          unidade: item.unidade,
+          status: item.status
+        });
+      } else {
+        // Log de rejeição para depuração fina
+        appDebugPrint_('[REJECT] Motorista descartado pelo filtro', {
+          nome: item.name || item.motorista,
+          unitMatch: unitMatch,
+          statusMatch: statusMatch,
+          detalhes: {
+            unidade: item.unidade,
+            unidadeTarget: CONFIG.CLICKUP.UNIDADE_ALVO,
+            tags: item.tags,
+            status: item.status,
+            statusAlvo: [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO].filter(Boolean)
+          }
+        });
+      }
+    }
 
-  return unitMatch && statusMatch;
+    return unitMatch && statusMatch;
   });
 }
 
