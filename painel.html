@@ -1492,13 +1492,15 @@ function _reRender(sec) {
 function carregarTodos() {
   if(!IS_GAS || _carregando) return;
   _carregando=true;
-  toast('🔄 Buscando dados da planilha...','');
 
   // ── DISPONIBILIDADE ─────────────────────────────────────
   google.script.run
     .withSuccessHandler(function(data){
       if(data && data.ok && data.rows){
         DISP=data.rows;
+        if(data.dataRef) DATA_REF=data.dataRef;
+        if(!data.filtrado && data.rows.length>0)
+          toast('📋 Disponibilidade: mostrando dados disponíveis (sem filtro de data)','');
         const s=_secaoAtiva();
         if(s==='disponibilidade') renderDisp();
         if(s==='dashboard')       renderDash();
@@ -1516,7 +1518,8 @@ function carregarTodos() {
       if(data && data.ok && data.rows){
         PROG=data.rows;
         if(data.dataRef) DATA_REF=data.dataRef;
-        // Derivar XML_DATA do PROG (status e valor quando disponíveis)
+        if(!data.filtrado && data.rows.length>0)
+          toast('📋 Programação: mostrando últimos registros disponíveis','');
         XML_DATA=PROG.map(function(r){
           return {
             plano:r.plano, placa:r.placa, motorista:r.motorista,
@@ -1530,6 +1533,8 @@ function carregarTodos() {
         if(s==='programacao') renderProg();
         if(s==='xml')         renderXML();
         if(s==='passagem')    renderPassagem();
+        // Re-render dashboard com dados reais
+        if(s==='dashboard') renderDash();
       } else if(data && data.error){
         toast('Prog: '+data.error,'err');
       }
@@ -1543,11 +1548,13 @@ function carregarTodos() {
     .withSuccessHandler(function(data){
       if(data && data.ok && data.rows){
         JORN=data.rows;
+        if(!data.filtrado && data.rows.length>0 && data.sheetName)
+          toast('📋 Jornada ('+data.sheetName+'): mostrando registros disponíveis','');
         const s=_secaoAtiva();
         if(s==='jornada')  renderJornada();
         if(s==='passagem') renderPassagem();
       }
-      if(data && data.warn) toast(data.warn,'');
+      if(data && data.warn) toast('⚠️ '+data.warn,'');
     })
     .withFailureHandler(function(e){ toast('Erro jornada: '+(e.message||e),'err'); })
     .getPainelJornadaData();
@@ -1562,7 +1569,6 @@ function recarregarDados() {
     if(a) goTo(a.id.replace('section-',''));
   }
 }
-
 
 // ═══════════════════════════════════════════════════════════
 // INIT
