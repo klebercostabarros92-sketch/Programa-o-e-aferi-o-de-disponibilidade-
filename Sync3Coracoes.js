@@ -280,3 +280,133 @@ function reportarPlacas() {
 
   SpreadsheetApp.getUi().alert('Relatório de placas concluído! ' + sourceData.length + ' linhas processadas.');
 }
+
+/**
+ * Envia e-mail para criação de usuários no GM7 Driver para condutores selecionados.
+ * Pode ser atribuído ao botão "3 corações" na planilha.
+ * - Gera/garante uma coluna de checkbox chamada "Incluir GM7"
+ * - Coleta linhas com checkbox marcado e envia e-mail padrão com tabela Nome / Placa / Perfil
+ * - Desmarca os checkboxes processados após envio
+ */
+function enviarSolicitacaoInclusaoGM7() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = findSheetCaseInsensitive_(ss, 'DISPONIBILIDADE');
+  if (!sh) {
+    SpreadsheetApp.getUi().alert('Erro: Aba "DISPONIBILIDADE" não encontrada.');
+    return;
+  }
+
+  const headerRow = 1;
+  const lastCol = sh.getLastColumn();
+  const lastRow = sh.getLastRow();
+  if (lastRow < headerRow + 1) {
+    SpreadsheetApp.getUi().alert('A aba "DISPONIBILIDADE" não possui linhas de dados.');
+    return;
+  }
+
+  const headers = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h || '').trim(); });
+
+  function findColByKeywords(keywords) {
+    const low = keywords.map(k => k.toLowerCase());
+    for (let i = 0; i < headers.length; i++) {
+      const hv = String(headers[i] || '').toLowerCase();
+      for (let j = 0; j < low.length; j++) {
+        if (hv.indexOf(low[j]) !== -1) return i + 1;
+      }
+    }
+    return -1;
+  }
+
+  const nameCol = findColByKeywords(['nome', 'motorista', 'condutor']);
+  const placaCol = findColByKeywords(['placa']);
+  const perfilCol = findColByKeywords(['perfil']);
+
+  const missing = [];
+  if (nameCol === -1) missing.push('Nome do condutor');
+  if (placaCol === -1) missing.push('Placa');
+  if (perfilCol === -1) missing.push('Perfil');
+  if (missing.length) {
+    SpreadsheetApp.getUi().alert('Colunas faltando na aba Disponibilidade: ' + missing.join(', ') + '.\nAdicione-as e tente novamente.');
+    return;
+  }
+
+  // Procurar coluna de checkbox existente
+  let checkboxCol = findColByKeywords(['incluir gm7', 'incluir', 'enviar gm7', 'enviar']);
+  if (checkboxCol === -1) {
+    // Criar nova coluna de checkbox ao final
+    const insertAfter = sh.getLastColumn();
+    sh.insertColumnAfter(insertAfter);
+    checkboxCol = insertAfter + 1;
+    sh.getRange(headerRow, checkboxCol).setValue('Incluir GM7');
+    const numDataRows = Math.max(1, lastRow - headerRow);
+    sh.getRange(headerRow + 1, checkboxCol, numDataRows).insertCheckboxes();
+  }
+
+  // Ler toda a área de dados para evitar leituras repetidas
+  const dataRange = sh.getRange(headerRow + 1, 1, Math.max(1, lastRow - headerRow), sh.getLastColumn());
+  const data = dataRange.getValues();
+
+  const rowsToSend = [];
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    const checked = row[checkboxCol - 1];
+    if (checked === true || checked === 'TRUE' || checked === 'true') {
+      const nome = String(row[nameCol - 1] || '').trim();
+      const placa = String(row[placaCol - 1] || '').trim();
+      const perfil = String(row[perfilCol - 1] || '').trim();
+      rowsToSend.push({nome: nome, placa: placa, perfil: perfil, rowIndex: headerRow + 1 + i});
+    }
+  }
+
+  if (rowsToSend.length === 0) {
+    SpreadsheetApp.getUi().alert('Nenhum condutor selecionado. Marque o checkbox "Incluir GM7" para os condutores desejados e tente novamente.');
+    return;
+  }
+
+  // Montar e-mail
+  const subject = 'Solicitação de inclusão de cadastro novo(os) condutor(es) no GM7 Driver (Green Mile)';
+  const hour = new Date().getHours();
+  const saudacao = (hour < 12) ? 'Bom dia' : 'Boa tarde';
+  const to = 'lucasdelamura@3coracoes.com.br,vitorfarias@3coracoes.com.br';
+  const cc = 'anaerica@3coracoes.com.br';
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  let tableHtml = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">';
+  tableHtml += '<tr><th>Nome do condutor</th><th>Placa</th><th>Perfil</th></tr>';
+  let tablePlain = 'Nome do condutor | Placa | Perfil\n';
+  tablePlain += '-----------------------------------------\n';
+  rowsToSend.forEach(function(r){
+    tableHtml += '<tr><td>' + escapeHtml(r.nome) + '</td><td>' + escapeHtml(r.placa) + '</td><td>' + escapeHtml(r.perfil) + '</td></tr>';
+    tablePlain += (r.nome || '-') + ' | ' + (r.placa || '-') + ' | ' + (r.perfil || '-') + '\n';
+  });
+  tableHtml += '</table>';
+
+  const htmlBody = '<p>' + saudacao + ' Lucas/Vitor,</p>' +
+    '<p>por gentileza criar usuário dos condutores(or) abaixo no Gm:</p>' +
+    tableHtml +
+    '<p>Atenciosamente,</p>';
+
+  const body = saudacao + ' Lucas/Vitor,\n\n' +
+    'por gentileza criar usuário dos condutores(or) abaixo no Gm:\n\n' +
+    tablePlain + '\nAtenciosamente,';
+
+  // Enviar e-mail
+  try {
+    MailApp.sendEmail({to: to, cc: cc, subject: subject, htmlBody: htmlBody, body: body});
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('Erro ao enviar e-mail: ' + e.message);
+    return;
+  }
+
+  // Desmarcar checkboxes processados
+  const toUncheckRanges = [];
+  rowsToSend.forEach(function(r){
+    sh.getRange(r.rowIndex, checkboxCol).setValue(false);
+  });
+
+  SpreadsheetApp.getUi().alert('E-mail enviado para ' + rowsToSend.length + ' condutor(es).');
+}
