@@ -236,50 +236,89 @@ function diagnosticarIdsClickUp() {
     }
   });
 
-  // Descobrir listas validas do workspace para facilitar correcao
+  // Verificar usuario/workspace atual para confirmar o token
+  let userInfo = {};
+  try {
+    const userResp = UrlFetchApp.fetch(base + '/user', { headers: headers, muteHttpExceptions: true });
+    const userCode = userResp.getResponseCode();
+    const userBody = userResp.getContentText() || '';
+    userInfo = { httpCode: userCode, preview: userBody.slice(0, 300) };
+    if (userCode === 200) {
+      const ud = JSON.parse(userBody);
+      userInfo.username = (ud.user && ud.user.username) || '';
+      userInfo.email = (ud.user && ud.user.email) || '';
+    }
+  } catch (eu) { userInfo = { error: eu.message }; }
+
+  // Descobrir times/workspaces e listas
   let workspaceLists = [];
+  let teamDebug = [];
   try {
     const teamsResp = UrlFetchApp.fetch(base + '/team', { headers: headers, muteHttpExceptions: true });
-    if (teamsResp.getResponseCode() === 200) {
-      const teams = (JSON.parse(teamsResp.getContentText()).teams) || [];
-      teams.forEach(function(team) {
-        try {
-          const spacesResp = UrlFetchApp.fetch(base + '/team/' + team.id + '/space?archived=false', { headers: headers, muteHttpExceptions: true });
-          if (spacesResp.getResponseCode() !== 200) return;
-          const spaces = (JSON.parse(spacesResp.getContentText()).spaces) || [];
-          spaces.forEach(function(space) {
-            try {
-              // Listas diretas no space
-              const slResp = UrlFetchApp.fetch(base + '/space/' + space.id + '/list?archived=false', { headers: headers, muteHttpExceptions: true });
-              if (slResp.getResponseCode() === 200) {
-                (JSON.parse(slResp.getContentText()).lists || []).forEach(function(l) {
-                  workspaceLists.push({ id: l.id, name: l.name, space: space.name, folder: null });
-                });
-              }
-              // Listas dentro de folders
-              const foldersResp = UrlFetchApp.fetch(base + '/space/' + space.id + '/folder?archived=false', { headers: headers, muteHttpExceptions: true });
-              if (foldersResp.getResponseCode() === 200) {
-                (JSON.parse(foldersResp.getContentText()).folders || []).forEach(function(folder) {
-                  (folder.lists || []).forEach(function(l) {
-                    workspaceLists.push({ id: l.id, name: l.name, space: space.name, folder: folder.name });
-                  });
-                });
-              }
-            } catch (e2) {}
-          });
-        } catch (e1) {}
+    const teamsCode = teamsResp.getResponseCode();
+    const teamsBody = teamsResp.getContentText() || '';
+    teamDebug.push({ endpoint: '/team', httpCode: teamsCode, preview: teamsBody.slice(0, 300) });
+
+    let teams = [];
+    if (teamsCode === 200) {
+      teams = (JSON.parse(teamsBody).teams) || [];
+    }
+
+    // Se /team nao retornou times, tenta com o teamId conhecido do workspace
+    if (!teams.length) {
+      const knownTeamIds = ['9007070798'];
+      knownTeamIds.forEach(function(tid) {
+        teams.push({ id: tid, name: 'workspace_' + tid, _fallback: true });
       });
     }
-  } catch (e0) {}
+
+    teams.forEach(function(team) {
+      try {
+        const spacesResp = UrlFetchApp.fetch(base + '/team/' + team.id + '/space?archived=false', { headers: headers, muteHttpExceptions: true });
+        const spacesCode = spacesResp.getResponseCode();
+        teamDebug.push({ endpoint: '/team/' + team.id + '/space', httpCode: spacesCode, teamName: team.name });
+        if (spacesCode !== 200) return;
+        const spaces = (JSON.parse(spacesResp.getContentText()).spaces) || [];
+        spaces.forEach(function(space) {
+          try {
+            const slResp = UrlFetchApp.fetch(base + '/space/' + space.id + '/list?archived=false', { headers: headers, muteHttpExceptions: true });
+            if (slResp.getResponseCode() === 200) {
+              (JSON.parse(slResp.getContentText()).lists || []).forEach(function(l) {
+                workspaceLists.push({ id: l.id, name: l.name, space: space.name, folder: null });
+              });
+            }
+            const foldersResp = UrlFetchApp.fetch(base + '/space/' + space.id + '/folder?archived=false', { headers: headers, muteHttpExceptions: true });
+            if (foldersResp.getResponseCode() === 200) {
+              (JSON.parse(foldersResp.getContentText()).folders || []).forEach(function(folder) {
+                (folder.lists || []).forEach(function(l) {
+                  workspaceLists.push({ id: l.id, name: l.name, space: space.name, folder: folder.name });
+                });
+              });
+            }
+          } catch (e2) {}
+        });
+      } catch (e1) {}
+    });
+  } catch (e0) { teamDebug.push({ error: e0.message }); }
+
+  appCodeLog_('[DIAGNOSTICO] /team debug', { userInfo: userInfo, teamDebug: teamDebug });
 
   const report = {
+    userInfo: userInfo,
     configuredIds: results,
     workspaceLists: workspaceLists,
+    teamDebug: teamDebug,
   };
 
   appCodeLog_('[DIAGNOSTICO] IDs ClickUp', report);
 
   const lines = ['=== DIAGNOSTICO IDS CLICKUP ===\n'];
+  if (userInfo.email || userInfo.username) {
+    lines.push('Token pertence a: ' + (userInfo.email || userInfo.username));
+  } else {
+    lines.push('⚠️ Nao foi possivel confirmar usuario do token (HTTP ' + (userInfo.httpCode || '?') + ')');
+  }
+  lines.push('');
   results.forEach(function(r) {
     lines.push((r.ok ? '✅' : '❌') + ' ' + r.label + ' (' + r.id + '): ' + r.status);
   });
@@ -289,7 +328,13 @@ function diagnosticarIdsClickUp() {
       lines.push('ID: ' + l.id + ' | ' + l.name + ' [Space: ' + l.space + (l.folder ? ', Folder: ' + l.folder : '') + ']');
     });
   } else {
-    lines.push('\n[Nao foi possivel listar listas do workspace]');
+    lines.push('\n⚠️ Nao foi possivel listar listas automaticamente.');
+    lines.push('Verifique o log do Apps Script para detalhes (teamDebug).');
+    lines.push('\nPara encontrar os IDs manualmente:');
+    lines.push('1. Abra o ClickUp no navegador');
+    lines.push('2. Va ate cada lista e copie o ID da URL');
+    lines.push('   Ex: app.clickup.com/t/{workspace}/v/l/{LIST_ID}');
+    lines.push('3. Para tasks: app.clickup.com/t/{TASK_ID}');
   }
   const msg = lines.join('\n');
   console.log(msg);
