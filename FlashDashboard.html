@@ -57,7 +57,7 @@
       .grid-kpi {
         margin-top: 14px;
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
         gap: 10px;
       }
       .kpi {
@@ -195,15 +195,12 @@
         <div class="kpi"><div class="k">Total Disponivel</div><div class="v" id="kTotalDisp">0</div></div>
         <div class="kpi"><div class="k">Total Utilizado</div><div class="v" id="kTotalUtil">0</div></div>
         <div class="kpi"><div class="k">% Utilizacao</div><div class="v" id="kPctUtil">0%</div></div>
-        <div class="kpi"><div class="k">Segundo Corte Total</div><div class="v" id="kSegundo">0</div></div>
       </div>
 
       <div class="main">
         <div class="left">
           <div class="card"><h3>Disponibilidade</h3><table id="tbDisp"></table></div>
           <div class="card"><h3>Utilizados</h3><table id="tbUtil"></table></div>
-          <div class="card"><h3>2o Corte</h3><table id="tbCorte"></table></div>
-          <div class="card"><h3>Meta e Resultado</h3><table id="tbMeta"></table><table id="tbMetaDia"></table></div>
         </div>
         <div class="right">
           <h3>DISPONIBILIDADE</h3>
@@ -220,9 +217,28 @@
         try { return JSON.parse(<?!= JSON.stringify(payload) ?> || '{}'); }
         catch (e) { return {}; }
       })();
-      var COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#22c55e', '#a855f7', '#06b6d4', '#84cc16'];
       function pct(v) { var n = Number(v || 0); return Math.round(n * 100) + '%'; }
       function int(v) { return Number(v || 0).toLocaleString('pt-BR'); }
+      function clampPct100(v) {
+        var n = Number(v || 0);
+        if (!isFinite(n) || n < 0) n = 0;
+        if (n > 100) n = 100;
+        return n;
+      }
+      function farolUtilColor(pctValue) {
+        var p = clampPct100(pctValue);
+        if (p >= 90) return '#ef4444';
+        if (p >= 70) return '#f97316';
+        if (p >= 40) return '#eab308';
+        return '#22c55e';
+      }
+      function farolUtilEmoji(pctValue) {
+        var p = clampPct100(pctValue);
+        if (p >= 90) return '🔴';
+        if (p >= 70) return '🟠';
+        if (p >= 40) return '🟡';
+        return '🟢';
+      }
 
       function renderSimpleTable(elId, headers, rows) {
         var el = document.getElementById(elId);
@@ -240,8 +256,6 @@
         document.getElementById('kTotalDisp').textContent = int(k.totalDisponivel);
         document.getElementById('kTotalUtil').textContent = int(k.totalUtilizado);
         document.getElementById('kPctUtil').textContent = pct(k.pctUtilizacao);
-        var segundo = (data.segundoCorte || []).reduce(function (acc, x) { return acc + Number(x.qtd || 0); }, 0);
-        document.getElementById('kSegundo').textContent = int(segundo);
 
         var dispRows = (data.disponibilidade || []).map(function (x) { return [x.tipo, int(x.qtd), pct(x.pctMeta), pct(x.pctPart)]; });
         dispRows.push(['TOTAL', int((data.kpis && data.kpis.totalDisponivel) || 0), '', '']);
@@ -251,43 +265,43 @@
         utilRows.push(['TOTAL', int((data.kpis && data.kpis.totalUtilizado) || 0), pct(k.pctUtilizacao)]);
         renderSimpleTable('tbUtil', ['TIPO', 'UTILIZADO', '% DISP'], utilRows);
 
-        var corteRows = (data.segundoCorte || []).map(function (x) { return [x.tipo, int(x.qtd), pct(Math.min(1, Number(x.pctDisp || 0)))]; });
-        renderSimpleTable('tbCorte', ['TIPO', '2o CORTE', '% DISP'], corteRows);
 
-        var metaRows = (data.metaDiaria || []).map(function (x) { return [x.tipo, int(x.meta)]; });
-        renderSimpleTable('tbMeta', ['TIPO', 'META'], metaRows);
 
-        var mdRows = (data.metaObtida || []).map(function (x) { return [x.tipo, int(x.realizado), pct(x.pctMeta)]; });
-        renderSimpleTable('tbMetaDia', ['TIPO', 'REALIZADO', '% META'], mdRows);
 
-        renderDonut(data.chart || [], (data.kpis && data.kpis.totalDisponivel) || 0);
+        renderDonut(data.chart || [], (data.kpis && data.kpis.totalDisponivel) || 0, data.utilizados || []);
       }
 
-      function renderDonut(slices, total) {
+      function renderDonut(slices, total, utilRows) {
         var donut = document.getElementById('donut');
         var center = document.getElementById('donutCenter');
         var tbLegend = document.getElementById('tbLegend');
         if (!donut || !center || !tbLegend) return;
+        var utilPctByTipo = {};
+        (utilRows || []).forEach(function (u) {
+          utilPctByTipo[String(u.tipo || '')] = clampPct100(Number(u.pctDisp || 0) * 100);
+        });
 
         var filtered = (slices || []).filter(function (x) { return Number(x.qtd || 0) > 0; });
         if (!filtered.length) {
           donut.style.background = '#334155';
           center.textContent = '0';
-          tbLegend.innerHTML = '<tr><th>Tipo</th><th>Qtd</th><th>%</th></tr><tr><td colspan=\"3\">Sem dados</td></tr>';
+          tbLegend.innerHTML = '<tr><th>Tipo</th><th>Qtd</th><th>% Part</th><th>Farol</th></tr><tr><td colspan=\"4\">Sem dados</td></tr>';
           return;
         }
 
         var acc = 0;
         var parts = [];
-        var legend = '<tr><th>Tipo</th><th>Qtd</th><th>%</th></tr>';
+        var legend = '<tr><th>Tipo</th><th>Qtd</th><th>% Part</th><th>Farol</th></tr>';
         for (var i = 0; i < filtered.length; i++) {
           var s = filtered[i];
           var p = Number(s.pct || 0) * 100;
           var start = acc;
           acc += p;
-          var color = COLORS[i % COLORS.length];
+          var utilPct = utilPctByTipo[String(s.tipo || '')] || 0;
+          var color = farolUtilColor(utilPct);
+          var emj = farolUtilEmoji(utilPct);
           parts.push(color + ' ' + start.toFixed(2) + '% ' + acc.toFixed(2) + '%');
-          legend += '<tr><td style=\"text-align:left\"><span class=\"dot\" style=\"background:' + color + '\"></span>' + s.tipo + '</td><td>' + int(s.qtd) + '</td><td>' + Math.round(p) + '%</td></tr>';
+          legend += '<tr><td style=\"text-align:left\"><span class=\"dot\" style=\"background:' + color + '\"></span>' + s.tipo + '</td><td>' + int(s.qtd) + '</td><td>' + Math.round(p) + '%</td><td>' + emj + ' ' + Math.round(utilPct) + '%</td></tr>';
         }
 
         donut.style.background = 'conic-gradient(' + parts.join(',') + ')';

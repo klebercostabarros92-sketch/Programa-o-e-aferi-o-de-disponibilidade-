@@ -1,4 +1,24 @@
-﻿const CONFIG = {
+const CONFIG = {
+  // Configurações de Planilhas
+  SHEET_PROGRAMACAO: 'Programa\u00e7\u00e3o',
+  SHEET_DISPONIBILIDADE: 'Disponibilidade',
+  PROGRAMACAO_HEADER_ROW: 3,
+  DISPONIBILIDADE_HEADER_ROW: 1,
+  MSG_HEADER_ROW: 1,
+  TOAST_TITLE: 'Sincroniza\u00e7\u00e3o',
+  
+  // Cabeçalhos Padrão
+  PROGRAMACAO_HEADERS: { 
+    placa: 'Placa', 
+    motorista: 'Motorista', 
+    greenMileStatus: 'GREEN MILE', 
+    attemicsStatus: 'ATTEMICS', 
+    clickupStatus: 'CLICKUP STATUS', 
+    clickup: 'CLICKUP', 
+    notaFiscal: 'Nota fiscal' 
+  },
+  DISP_HEADERS: { placa: 'PLACA', motorista: 'MOTORISTA' },
+
   SOURCE_SPREADSHEET_ID: '1v3vHmzNQWFwnQ4JsZKn70hM8OtscQlVlvS4OnGZJ4IU',
   SOURCE_SHEET_NAME: 'PROG DIARIA THX',
   TARGET_SHEET_NAME: 'Programa\u00e7\u00e3o',
@@ -9,8 +29,8 @@
   GREENMILE: {
     ENABLED: true,
     BASE_URL: 'https://3coracoes.greenmile.com',
-    LOGIN_USERNAME: 'richardthx',
-    LOGIN_PASSWORD: 'GM@thx2025',
+    LOGIN_USERNAME: '',
+    LOGIN_PASSWORD: '',
     RESTRICTIONS_FILTERS_QUERY:
       '%7B%22filters%22:%5B%22id%22,%22stop.orders.number%22,%22routeView.route.key%22,%22stop.location.key%22,%22stop.orders.plannedSize3%22,%22stop.orders.damagedSize3%22,%22stop.location.description%22,%22stop.orders.plannedSize1%22,%22stop.orders.stop.id%22,%22stop.orders.stop.key%22%5D,%22firstResult%22:0,%22maxResults%22:200%7D',
     SUMMARY_FILTERS_QUERY:
@@ -19,7 +39,7 @@
       '%7B%22filters%22:%5B%22id%22,%22description%22,%22locationType.id%22,%22locationType.description%22,%22district%22,%22zipCode%22,%22city%22,%22addressLine1%22,%22key%22%5D,%22firstResult%22:0,%22maxResults%22:51%7D',
   },
   CLICKUP: {
-    TOKEN: 'pk_87986690_9X1MC60UE18B1X9PEJFRMEFTT6GNHHFS',
+    TOKEN: '',
     BASE_URL: 'https://api.clickup.com/api/v2',
     LIST_ID_MOTORISTAS: '901310964393',
     PAGE_SIZE: 500,
@@ -34,9 +54,10 @@
     PROGRAMACAO: {
       LIST_ID_CARDS: '901314444834',
       LIST_ID_MAPA: '90136429320',
+      TEMPLATE_TASK_ID: '86aenj71r',
       SHEET_STATUS_COLUMN_NAME: 'CLICKUP STATUS',
       SHEET_LINK_COLUMN_NAME: 'CLICKUP',
-      PENDING_PREFIX: '[Pendente]',
+      PENDING_PREFIX: '[Buscando dados]',
       ERROR_PREFIX: '[ERROR]',
       DEBOUNCE_MS: 3000,
       ENABLE_ONEDIT_JANELA_SYNC: true,
@@ -58,7 +79,7 @@
   },
   ATTEMICS: {
     BASE_URL_SEND_TEXT: 'https://api.attemics.com.br/core/v2/api/chats/send-text',
-    ACCESS_TOKEN: '669557bad8699aa536cfb9bb',
+    ACCESS_TOKEN: '',
     TEST_MODE_DEFAULT: true,
     TEST_NUMBER: '35998182404',
     SEND_DELAY_SECONDS: 1.5,
@@ -70,8 +91,8 @@
     LOG_SHEET_NAME: 'LOG_ATTEMICS',
   },
   XML_COBRANCA: {
-    TO: 'cailaununes@gmail.com', // Temporario
-    CC: '',
+    TO: 'LISTA LOGISTICA SÃO PAULO <listalogisticasp@3coracoes.com.br>, Vitor Farias <vitorfarias@3coracoes.com.br>',
+    CC: 'Nathanael Silva <nathanael.silva@thxgroup.com.br>, Carlos Peixoto <carlos.peixoto@thxgroup.com.br>',
     BCC: '',
     SUBJECT_PREFIX: 'XML',
     FILTER_TODAY_ONLY: false,
@@ -130,23 +151,240 @@ const AUTO_PROG_MONITOR_PROP_LASTCHANGE_ = 'AUTO_PROG_MONITOR_LAST_CHANGE';
 const XML_RECEBIMENTO_TRIGGER_FN_ = 'monitorarAtualizacaoXmlRecebidos';
 const SHEET_3C_DISPONIBILIDADE_ID_ = '1Ysk4oXy18uuWbqTMbFNq0zZuNBDdnJWqL4L7dsmZm0g';
 
+const SECRET_KEYS_ = {
+  CLICKUP_API_KEY: 'CLICKUP_API_KEY',
+  GREENMILE_LOGIN_USERNAME: 'GREENMILE_LOGIN_USERNAME',
+  GREENMILE_LOGIN_PASSWORD: 'GREENMILE_LOGIN_PASSWORD',
+  ATTEMICS_ACCESS_TOKEN: 'ATTEMICS_ACCESS_TOKEN',
+  FLASH_LAST_MILE_CHAT_WEBHOOK_URL: 'FLASH_LAST_MILE_CHAT_WEBHOOK_URL',
+};
+
+function getClickUpApiKey_() {
+  const props = PropertiesService.getScriptProperties();
+  let value = normalizeClickUpApiKey_(props.getProperty(SECRET_KEYS_.CLICKUP_API_KEY));
+  if (!value) value = normalizeClickUpApiKey_(props.getProperty('CLICKUP_TOKEN'));
+  if (!value) throw new Error('Required secret is missing: ' + SECRET_KEYS_.CLICKUP_API_KEY);
+  return value;
+}
+
+function normalizeClickUpApiKey_(rawValue) {
+  let value = String(rawValue || '');
+  if (!value) return '';
+  value = value.replace(/[\u0000-\u001F\u007F]/g, '');
+  value = value.replace(/^Bearer\s+/i, '').trim();
+  value = value.replace(/^['"]+|['"]+$/g, '').trim();
+  const pkMatch = value.match(/\bpk_[A-Za-z0-9_\\-]+\b/);
+  if (pkMatch && pkMatch[0]) return pkMatch[0].trim();
+  return value.trim();
+}
+
+function diagnosticarAuthClickUp() {
+  const props = PropertiesService.getScriptProperties();
+  const rawPrimary = String(props.getProperty(SECRET_KEYS_.CLICKUP_API_KEY) || '');
+  const rawLegacy = String(props.getProperty('CLICKUP_TOKEN') || '');
+  const token = getClickUpApiKey_();
+  const url = CONFIG.CLICKUP.BASE_URL + '/user';
+  const response = UrlFetchApp.fetch(url, {
+    method: 'get',
+    muteHttpExceptions: true,
+    headers: { Authorization: token },
+  });
+  const code = response.getResponseCode();
+  const text = String(response.getContentText() || '').slice(0, 300);
+  return {
+    ok: code >= 200 && code < 300,
+    httpCode: code,
+    hasClickUpApiKeyProperty: !!rawPrimary.trim(),
+    hasLegacyClickUpTokenProperty: !!rawLegacy.trim(),
+    tokenPrefix: token ? token.slice(0, 3) : '',
+    tokenLength: token ? token.length : 0,
+    responsePreview: redact(text),
+  };
+}
+
+function listarCamposClickUpSemAcessoEdicao(taskIdOrUrl) {
+  const cfg = getClickUpProgramacaoConfig_();
+  let taskId = extractClickUpTaskIdFromInput_(taskIdOrUrl);
+  if (!taskId) {
+    const listId = String((cfg && cfg.LIST_ID_CARDS) || '').trim();
+    if (!listId) throw new Error('LIST_ID_CARDS nao configurado para diagnostico.');
+    const tasks = fetchClickUpTasksByList_(listId, false) || [];
+    taskId = String(tasks[0] && tasks[0].id ? tasks[0].id : '').trim();
+  }
+  if (!taskId) throw new Error('Task ID nao informado e nenhuma task encontrada para diagnostico.');
+
+  const task = fetchClickUpTaskById_(taskId);
+  const customFields = asArray_(task && task.custom_fields);
+  const semAcesso = [];
+  const outrosErros = [];
+
+  for (let i = 0; i < customFields.length; i++) {
+    const cf = customFields[i] || {};
+    const fieldId = String(cf.id || '').trim();
+    const fieldName = String(cf.name || '').trim() || ('FIELD_' + (i + 1));
+    if (!fieldId) continue;
+
+    let valueForApi = null;
+    try {
+      valueForApi = normalizeClickUpCustomFieldValueForApi_(taskId, fieldId, resolveClickUpCustomFieldValue_(cf));
+    } catch (e) {
+      valueForApi = cf && Object.prototype.hasOwnProperty.call(cf, 'value') ? cf.value : '';
+    }
+
+    const response = UrlFetchApp.fetch(
+      CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(taskId) + '/field/' + encodeURIComponent(fieldId),
+      {
+        method: 'post',
+        muteHttpExceptions: true,
+        contentType: 'application/json',
+        headers: { Authorization: getClickUpApiKey_() },
+        payload: JSON.stringify({ value: valueForApi }),
+      }
+    );
+
+    const code = response.getResponseCode();
+    const text = String(response.getContentText() || '');
+    if (code === 401 && text.indexOf('ACCESS_606') !== -1) {
+      semAcesso.push(fieldName);
+    } else if (code < 200 || code >= 300) {
+      outrosErros.push(fieldName);
+    }
+  }
+
+  console.log('=== ClickUp | Campos sem acesso de edicao ===');
+  console.log('Task: ' + taskId);
+  if (!semAcesso.length) {
+    console.log('Nenhum campo bloqueado por permissao (ACCESS_606).');
+  } else {
+    for (let i = 0; i < semAcesso.length; i++) {
+      console.log((i + 1) + '. ' + semAcesso[i]);
+    }
+  }
+  console.log('Resumo: semAcesso=' + semAcesso.length + ' | outrosErros=' + outrosErros.length);
+
+  return {
+    ok: true,
+    taskId: taskId,
+    semAcesso: semAcesso,
+    outrosErros: outrosErros,
+  };
+}
+
+function listarCamposClickUpSemAcessoEdicao86afvbu0h() {
+  return listarCamposClickUpSemAcessoEdicao('86afvbu0h');
+}
+
+function getAttemicsAccessToken_() {
+  return requireSecret(SECRET_KEYS_.ATTEMICS_ACCESS_TOKEN);
+}
+
+function getGreenMileCredentials_() {
+  return {
+    username: requireSecret(SECRET_KEYS_.GREENMILE_LOGIN_USERNAME),
+    password: requireSecret(SECRET_KEYS_.GREENMILE_LOGIN_PASSWORD),
+  };
+}
+
+function getInputValue_(input, keys) {
+  const source = input || {};
+  const aliases = Array.isArray(keys) ? keys : [keys];
+  for (let i = 0; i < aliases.length; i++) {
+    const key = aliases[i];
+    if (!key) continue;
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const raw = source[key];
+      if (raw == null) continue;
+      const value = String(raw).trim();
+      if (value) return value;
+    }
+  }
+  return '';
+}
+
+function migrateHardcodedSecretsToProperties(input) {
+  /*
+   * TEMPORÁRIO: APAGAR APÓS EXECUTAR 1X
+   * TEMPORÁRIO: APAGAR APÓS EXECUTAR 1X
+   * TEMPORÁRIO: APAGAR APÓS EXECUTAR 1X
+   * Migra segredos que estavam hardcoded para Script Properties.
+   * Esta funcao nao deve permanecer no codigo apos a migracao.
+   */
+  const props = PropertiesService.getScriptProperties();
+  const payload = input || {};
+  const created = [];
+  const alreadyExisted = [];
+  const missingInput = [];
+  const toCreate = {};
+  const legacyHardcoded = {
+    CLICKUP_API_KEY: 'pk_106123901_7ST9EIKIS7QV2LTN9XZNXNMH67LR7GQ8',
+    GREENMILE_LOGIN_USERNAME: 'richardthx',
+    GREENMILE_LOGIN_PASSWORD: 'GM@thx2025',
+    ATTEMICS_ACCESS_TOKEN: '669557bad8699aa536cfb9bb',
+    FLASH_LAST_MILE_CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAAAtIxsN8E/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=0ykhfXhAadLLFBm3bXeSr4oGFikl8YumJ-KiXK374bs',
+  };
+  const legacyClickUpToken = String(props.getProperty('CLICKUP_TOKEN') || '').trim();
+  const currentClickUpApiKey = String(props.getProperty(SECRET_KEYS_.CLICKUP_API_KEY) || '').trim();
+  const providedClickUpApiKey = getInputValue_(payload, ['clickupApiKey', 'clickupToken']);
+  const clickUpFromLegacy = !currentClickUpApiKey && legacyClickUpToken ? legacyClickUpToken : legacyHardcoded.CLICKUP_API_KEY;
+
+  const candidates = {};
+  candidates[SECRET_KEYS_.CLICKUP_API_KEY] = providedClickUpApiKey || clickUpFromLegacy;
+  candidates[SECRET_KEYS_.GREENMILE_LOGIN_USERNAME] = getInputValue_(payload, ['greenMileLoginUsername', 'greenmileLoginUsername']) || legacyHardcoded.GREENMILE_LOGIN_USERNAME;
+  candidates[SECRET_KEYS_.GREENMILE_LOGIN_PASSWORD] = getInputValue_(payload, ['greenMileLoginPassword', 'greenmileLoginPassword']) || legacyHardcoded.GREENMILE_LOGIN_PASSWORD;
+  candidates[SECRET_KEYS_.ATTEMICS_ACCESS_TOKEN] = getInputValue_(payload, ['attemicsAccessToken']) || legacyHardcoded.ATTEMICS_ACCESS_TOKEN;
+  candidates[SECRET_KEYS_.FLASH_LAST_MILE_CHAT_WEBHOOK_URL] = getInputValue_(payload, ['flashLastMileChatWebhookUrl', 'chatWebhookUrl']) || legacyHardcoded.FLASH_LAST_MILE_CHAT_WEBHOOK_URL;
+
+  Object.keys(candidates).forEach(function (key) {
+    const existing = String(props.getProperty(key) || '').trim();
+    if (existing) {
+      alreadyExisted.push(key);
+      return;
+    }
+
+    const candidate = String(candidates[key] || '').trim();
+    if (!candidate) {
+      missingInput.push(key);
+      return;
+    }
+
+    toCreate[key] = candidate;
+    created.push(key);
+  });
+
+  if (Object.keys(toCreate).length) {
+    props.setProperties(toCreate, true);
+  }
+
+  return {
+    created: created,
+    alreadyExisted: alreadyExisted,
+    missingInput: missingInput,
+  };
+}
+
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
-  const menuOps = ui.createMenu('Atualiza\u00e7\u00e3o');
-  const menuMsg = ui.createMenu('Attemics');
-  const menu3C = ui.createMenu('3cora\u00e7\u00f5es');
-  const menuClickUp = ui.createMenu('ClickUp');
+  const menuOps = ui.createMenu('⚙️ Atualiza\u00e7\u00e3o');
+  const menuFlash = ui.createMenu('⚡ FLASH');
+  const menuMsg = ui.createMenu('✉️ Mensagens');
+  const menu3C = ui.createMenu('☕ 3cora\u00e7\u00f5es');
+  const menuClickUp = ui.createMenu('📌 ClickUp');
+  const menuJornada = ui.createMenu('🕒 Jornada Interna');
 
   menuOps
     .addItem('\u{1f69a} Atualizar Programa\u00e7\u00e3o', 'atualizarProgramacao')
     .addItem('\u{1f4cb} Atualizar Disponibilidade (ClickUp)', 'atualizarDisponibilidadeClickUp')
     .addSeparator()
-    .addItem('\u{1f3b2} Aleatorizar Placas', 'aleatorizarPlacasProgramacao')
+    .addItem('\u{1f3b2} Aleatorizar Placas', 'aleatorizarPlacasProgramacao');
+
+  menuFlash
+    .addItem('\ud83d\ude9a FLASH GUARULHOS (Atualizar + Enviar)', 'executarFlashGuarulhosAgora')
     .addSeparator()
-    .addItem('\u{1f4ca} Atualizar FLASH LAST MILE', 'gerarFlashLastMile')
-    .addItem('\u{1f4e3} Enviar FLASH no Chat', 'enviarFlashLastMileNoChatAgora')
-    .addItem('\u23f1\ufe0f Ativar auto FLASH (1min)', 'ativarMonitorFlashLastMile1Min')
-    .addItem('\u23f9\ufe0f Desativar auto FLASH', 'desativarMonitorFlashLastMile');
+    .addItem('📱 Passagem de Turno: Programação', 'enviarFlashPassagemProgramacao')
+    .addItem('🏭 Passagem de Turno: Jornada Interna', 'enviarFlashPassagemJornada')
+    .addItem('🔵 Passagem de Turno: Disponibilidade', 'enviarFlashPassagemDisponibilidade')
+    .addSeparator()
+    .addItem('🔄 Flash Passagem de Turno (Completo)', 'executarFlashPassagemTurnoAgora');
 
   if (CONFIG.DEBUG && CONFIG.DEBUG.SHOW_MENU_ITEMS) {
     menuOps
@@ -162,24 +400,43 @@ function onOpen() {
 
   menu3C
     .addItem('Atualizar planilhas', 'atualizarPlanilhas3Coracoes')
-    .addItem('\u{1f4e7} Cobrar XML', 'cobrarXmlProgramacaoPorEmail')
+    .addItem('🔄 Sincronizar Disponibilidade (Padrão D,I,P)', 'syncDisponibilidadePara3CoracoesExterno')
+    .addItem('📋 Reportar Placas', 'reportarPlacas')
+    .addItem('✉️ Cobrar XML', 'cobrarXmlProgramacaoPorEmail')
     .addSeparator()
-    .addItem('\u{1f4e6} Processar XML agora', 'processarXmlRecebidosAgora');
+    .addItem('\ud83d\udce6 Processar XML agora', 'processarXmlRecebidosAgora')
+    .addSeparator()
+    .addItem('\ud83d\udee0\ufe0f Corrigir Cores (Amarelo)', 'ensureDisponibilidadeStatusValidation_');
 
   menuClickUp
     .addItem('\u{1f4cc} Criar Cards', 'criarCardsClickUpProgramacao')
-    .addItem('\u2699\ufe0f Preencher Campos', 'preencherCamposCardsClickUpProgramacao')
+    .addItem('\u{1f50e} Buscando dados', 'preencherCamposCardsClickUpProgramacao')
     .addItem('\u{1f5fa}\ufe0f Mover para o mapa', 'moverCardsClickUpParaMapa')
     ;
 
   menuOps.addToUi();
+  menuFlash.addToUi();
   menu3C.addToUi();
   menuMsg.addToUi();
   menuClickUp.addToUi();
+  menuJornada
+    .addItem('🛠️ Configurar aba', 'setupJornadaInterna')
+    .addItem('🔄 Sincronizar dados de hoje', 'syncJornadaInternaToday')
+    .addItem('⏰ Criar gatilho diário', 'createJornadaDailyTrigger')
+    .addToUi();
 
   // Garante o loop de XML sempre ativo, mesmo sem acao manual no menu.
   try { ensureXmlRecebimentoMonitorSempreAtivo_(); } catch (e) {}
   try { ensureFlashLastMileMonitorSempreAtivo_(); } catch (e) {}
+  try { ensureDisponibilidadeObservacaoValidation_(); } catch (e) {}
+  try { ensureDisponibilidadeStatusValidation_(); } catch (e) {}
+}
+
+function executarFlashGuarulhosAgora() {
+  var run = gerarFlashLastMile();
+  var chat = enviarFlashLastMileNoChatAgora();
+  toast_(SpreadsheetApp.getActiveSpreadsheet(), 'FLASH GUARULHOS enviado no chat.');
+  return { ok: true, run: run, chat: chat };
 }
 
 function atualizarProgramacao() {
@@ -1347,10 +1604,10 @@ function parseNfeXmlForImport_(xmlText) {
     TRANSPORTA_xEnder: extractXmlTagValue_(transporta, 'xEnder'),
     TRANSPORTA_xMun: extractXmlTagValue_(transporta, 'xMun'),
     TRANSPORTA_UF: extractXmlTagValue_(transporta, 'UF'),
-    RETTRANSP_vServ: extractXmlTagValue_(retTransp, 'vServ'),
-    RETTRANSP_vBCRet: extractXmlTagValue_(retTransp, 'vBCRet'),
-    RETTRANSP_pICMSRet: extractXmlTagValue_(retTransp, 'pICMSRet'),
-    RETTRANSP_vICMSRet: extractXmlTagValue_(retTransp, 'vICMSRet'),
+    RETTRANSP_vServ: normalizeXmlDecimalText_(extractXmlTagValue_(retTransp, 'vServ')),
+    RETTRANSP_vBCRet: normalizeXmlDecimalText_(extractXmlTagValue_(retTransp, 'vBCRet')),
+    RETTRANSP_pICMSRet: normalizeXmlDecimalText_(extractXmlTagValue_(retTransp, 'pICMSRet')),
+    RETTRANSP_vICMSRet: normalizeXmlDecimalText_(extractXmlTagValue_(retTransp, 'vICMSRet')),
     RETTRANSP_CFOP: extractXmlTagValue_(retTransp, 'CFOP'),
     RETTRANSP_cMunFG: extractXmlTagValue_(retTransp, 'cMunFG'),
     VEICTRANSP_placa: extractXmlTagValue_(veicTransp, 'placa'),
@@ -1364,11 +1621,19 @@ function parseNfeXmlForImport_(xmlText) {
     VOL_qVol: extractXmlTagValue_(vol, 'qVol'),
     VOL_esp: extractXmlTagValue_(vol, 'esp'),
     VOL_marca: extractXmlTagValue_(vol, 'marca'),
-    VOL_nVol: extractXmlTagValue_(vol, 'nVol'),
-    VOL_pesoL: extractXmlTagValue_(vol, 'pesoL'),
-    VOL_pesoB: extractXmlTagValue_(vol, 'pesoB'),
+    VOL_nVol: normalizeXmlDecimalText_(extractXmlTagValue_(vol, 'nVol')),
+    VOL_pesoL: normalizeXmlDecimalText_(extractXmlTagValue_(vol, 'pesoL')),
+    VOL_pesoB: normalizeXmlDecimalText_(extractXmlTagValue_(vol, 'pesoB')),
     VOL_nLacre: extractXmlTagValue_(lacres, 'nLacre'),
   };
+}
+
+function normalizeXmlDecimalText_(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text) return '';
+  if (text.indexOf('.') === -1) return text;
+  if (!/^-?\d+(?:\.\d+)?$/.test(text)) return text;
+  return text.replace('.', ',');
 }
 
 function extractXmlBlockByTag_(xmlText, tagName) {
@@ -1444,10 +1709,9 @@ function refreshProgramacaoXmlStatusFromImportSheet_(ss, xmlSheet, cfg) {
   const shProg = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
   if (!shProg) throw new Error('Aba ' + CFG.SHEET_PROGRAMACAO + ' nao encontrada.');
   const headerRow = getProgramacaoHeaderRow_();
-  const xmlCols = ensureProgramacaoXmlStatusColumns_(shProg, headerRow, cfg, 0);
+  const notaCol = findBestHeaderColumnByAliases_(shProg, headerRow, ['NOTA FISCAL', CFG.PROGRAMACAO_HEADERS.notaFiscal], 'Programacao');
+  const xmlCols = ensureProgramacaoXmlStatusColumns_(shProg, headerRow, cfg, notaCol);
   // Recalcula apos ajustar/remover/realocar colunas XML.
-  const hProg = mapHeaders_(shProg, headerRow);
-  const notaCol = getHeaderColRequired_(hProg, ['NOTA FISCAL', CFG.PROGRAMACAO_HEADERS.notaFiscal], 'Programacao');
   const xmlIndex = buildXmlIndexByNfFromImportSheet_(xmlSheet);
   const startRow = headerRow + 1;
   const lastRow = shProg.getLastRow();
@@ -1478,10 +1742,10 @@ function refreshProgramacaoXmlStatusFromImportSheet_(ss, xmlSheet, cfg) {
       }
       missingText = missing.join(', ');
       if (missing.length) {
-        status = '\ud83d\udd34 Faltando XML';
+        status = '\ud83d\udd34 Faltando XML (' + (expected.length - missing.length) + '/' + expected.length + ')';
         faltando++;
       } else {
-        status = '\ud83d\udfe2 XML OK';
+        status = '\ud83d\udfe2 XML OK (' + expected.length + '/' + expected.length + ')';
         completo++;
       }
     }
@@ -1557,7 +1821,7 @@ function ensureProgramacaoColumnBeforeNotaFiscal_(sheet, headerRow, notaColOrigi
   if (!header) return 0;
 
   let map = mapHeaders_(sheet, headerRow);
-  let notaCol = getHeaderColRequired_(map, ['NOTA FISCAL', CFG.PROGRAMACAO_HEADERS.notaFiscal], 'Programacao');
+  let notaCol = findBestHeaderColumnByAliases_(sheet, headerRow, ['NOTA FISCAL', CFG.PROGRAMACAO_HEADERS.notaFiscal], 'Programacao');
   if (!notaCol && Number(notaColOriginal)) notaCol = Number(notaColOriginal);
   let col = getHeaderColOptional_(map, [header]);
 
@@ -1574,6 +1838,47 @@ function ensureProgramacaoColumnBeforeNotaFiscal_(sheet, headerRow, notaColOrigi
   }
 
   return col;
+}
+
+function findBestHeaderColumnByAliases_(sheet, headerRow, aliases, ctxName) {
+  const row = Math.max(1, Number(headerRow) || 1);
+  const lastCol = sheet.getLastColumn();
+  if (lastCol < 1) throw new Error('Cabecalho nao encontrado em ' + ctxName + ': ' + aliases.join(' | '));
+
+  const aliasNorm = {};
+  for (let i = 0; i < (aliases || []).length; i++) {
+    const key = normalizeHeader_(aliases[i]);
+    if (key) aliasNorm[key] = true;
+  }
+
+  const headerVals = sheet.getRange(row, 1, 1, lastCol).getDisplayValues()[0] || [];
+  const candidates = [];
+  for (let c = 0; c < headerVals.length; c++) {
+    const raw = String(headerVals[c] || '').trim();
+    if (!raw) continue;
+    if (aliasNorm[normalizeHeader_(raw)]) candidates.push(c + 1);
+  }
+  if (!candidates.length) throw new Error('Cabecalho nao encontrado em ' + ctxName + ': ' + aliases.join(' | '));
+  if (candidates.length === 1) return candidates[0];
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= row) return candidates[0];
+  const sampleRows = Math.min(lastRow - row, 5000);
+  let bestCol = candidates[0];
+  let bestScore = -1;
+  for (let i = 0; i < candidates.length; i++) {
+    const col = candidates[i];
+    const vals = sheet.getRange(row + 1, col, sampleRows, 1).getDisplayValues();
+    let filled = 0;
+    for (let r = 0; r < vals.length; r++) {
+      if (String(vals[r] && vals[r][0] || '').trim()) filled++;
+    }
+    if (filled > bestScore) {
+      bestScore = filled;
+      bestCol = col;
+    }
+  }
+  return bestCol;
 }
 
 function buildXmlIndexByNfFromImportSheet_(xmlSheet) {
@@ -1640,8 +1945,20 @@ function syncXmlImportRowsToGruBasePeso_(xmlRows, cfg) {
     if (!col) continue;
     mappings.push({ sourceIndex: i, targetCol: col });
   }
+
+  // FALLBACK: Se não encontrou nenhum cabeçalho mapeado, mas a planilha tem dados ou cabeçalhos sumiram,
+  // tenta usar mapeamento por posição (1:1) se a Coluna A parecer um arquivo XML.
+  if (!mappings.length && targetSheet.getLastRow() >= 1) {
+    const firstColVal = String(targetSheet.getRange(1, 1).getDisplayValue() || '').trim().toLowerCase();
+    if (firstColVal.indexOf('.xml') !== -1 || firstColVal === 'arquivo') {
+      for (let i = 0; i < srcHeaders.length; i++) {
+        mappings.push({ sourceIndex: i, targetCol: i + 1 });
+      }
+    }
+  }
+
   if (!mappings.length) {
-    throw new Error('GRU base peso: nenhuma coluna compativel com XML_IMPORTADOS foi encontrada.');
+    throw new Error('GRU base peso: nenhuma coluna compativel com XML_IMPORTADOS foi encontrada e o fallback posicional falhou.');
   }
 
   const startRow = targetSheet.getLastRow() + 1;
@@ -1811,7 +2128,25 @@ function monitorarAtualizacaoProgramacaoPorMudanca() {
     }
     props.setProperty(AUTO_PROG_MONITOR_PROP_HASH_, fp.hash);
     props.setProperty(AUTO_PROG_MONITOR_PROP_LASTCHANGE_, new Date().toISOString());
-    return { ok: true, changed: true, hash: fp.hash, rows: fp.rows, update: result, alertaAttemics: alertaAttemics };
+
+    // Sincroniza disponibilidade automaticamente apos mudanca na programacao.
+    let resultDisp = { skipped: true };
+    try {
+      resultDisp = syncDisponibilidadeParaPlanilha3Coracoes_();
+      syncDisponibilidadeProgramadoFromProgramacao_();
+    } catch (e) {
+      appDebugError_(e, { step: 'sync_disponibilidade_auto' });
+    }
+
+    return { 
+      ok: true, 
+      changed: true, 
+      hash: fp.hash, 
+      rows: fp.rows, 
+      update: result, 
+      disponibilidade: resultDisp,
+      alertaAttemics: alertaAttemics 
+    };
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
@@ -2087,8 +2422,8 @@ function syncDisponibilidadeParaPlanilha3Coracoes_() {
   const cTMotorista = getHeaderColRequired_(hMap, ['MOTORISTA'], 'DISPONIBILIDADE THX');
   const cTCPF = getHeaderColOptional_(hMap, ['CPF']);
   const cTTransp = getHeaderColOptional_(hMap, ['TRANSP.', 'TRANSP']);
-  const cTStatus = getHeaderColOptional_(hMap, ['STATUS']);
-  const cTSituacao = getHeaderColOptional_(hMap, ['SITUACAO', 'SITUAÇÃO']);
+  const cTStatus = getHeaderColOptional_(hMap, ['STATUS', 'DISPONIBILIDADE']);
+  const cTSituacao = getHeaderColOptional_(hMap, ['SITUACAO', 'SITUAÇÃO', 'PLANO']);
   const cTObs = getHeaderColOptional_(hMap, ['OBSERVACAO', 'OBSERVAÇÃO']);
 
   const lastRow = targetSheet.getLastRow();
@@ -2119,16 +2454,16 @@ function syncDisponibilidadeParaPlanilha3Coracoes_() {
     if (cTTransp) buf[cTTransp - 1] = item.transp || 'THX';
     if (cTStatus) {
       const currentStatus = normalizeHeader_(buf[cTStatus - 1]);
-      const nextStatus = String(item.status || 'D').trim();
-      // Nunca rebaixa P para D.
-      if (!(currentStatus === normalizeHeader_('P') && normalizeHeader_(nextStatus) === normalizeHeader_('D'))) {
+      const nextStatus = item.status === 'P' ? 'Programado' : 'Disponível';
+      // Nunca rebaixa Programado para Disponível automaticamente
+      if (!(currentStatus === normalizeHeader_('Programado') && normalizeHeader_(nextStatus) === normalizeHeader_('Disponível'))) {
         buf[cTStatus - 1] = nextStatus;
       }
     }
     if (cTSituacao) {
       const currentStatus = cTStatus ? normalizeHeader_(buf[cTStatus - 1]) : '';
-      const nextStatusNorm = normalizeHeader_(item.status || '');
-      const preserveSituacao = currentStatus === normalizeHeader_('P') && nextStatusNorm === normalizeHeader_('D');
+      const nextStatusNorm = normalizeHeader_(item.status === 'P' ? 'Programado' : 'Disponível');
+      const preserveSituacao = currentStatus === normalizeHeader_('Programado') && nextStatusNorm === normalizeHeader_('Disponível');
       if (!preserveSituacao) {
         buf[cTSituacao - 1] = item.situacao || '';
       }
@@ -2225,12 +2560,12 @@ function diagnosticarCamposClickUpProgramacao() {
     }
   }
   const keys = Object.keys(map).sort();
-  const plateId = map['🤖 PLACA'] || map['PLACA'] || '';
-  const janelaId = map['⚠️ Janela de coleta'] || map['Janela de coleta'] || '';
+  const plateId = map['?? PLACA'] || map['PLACA'] || '';
+  const janelaId = map['?? Janela de coleta'] || map['Janela de coleta'] || '';
   const resumo = [
     'Campos encontrados: ' + keys.length,
-    plateId ? ('🤖 PLACA: ' + plateId) : '🤖 PLACA: NAO ENCONTRADO',
-    janelaId ? ('⚠️ Janela de coleta: ' + janelaId) : '⚠️ Janela de coleta: NAO ENCONTRADO',
+    plateId ? ('?? PLACA: ' + plateId) : '?? PLACA: NAO ENCONTRADO',
+    janelaId ? ('?? Janela de coleta: ' + janelaId) : '?? Janela de coleta: NAO ENCONTRADO',
   ].join('\n');
   try { SpreadsheetApp.getUi().alert('Diagnostico ClickUp', resumo, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) {}
   return { ok: true, data: { totalCampos: keys.length, placaBot: plateId, janelaColeta: janelaId, fields: map } };
@@ -2261,15 +2596,17 @@ function runClickUpCardsProgramacao_(options) {
       return { ok: true, data: { total: 0, created: 0, updated: 0, linked: 0, errors: 0, skipped: 0 } };
     }
     const listId = getClickUpProgramacaoConfig_().LIST_ID_CARDS;
-    const tasks = fetchClickUpTasksByList_(listId, false) || [];
-    const index = indexClickUpTasksByPlano_(tasks);
+    const tasks = mode === 'create' ? [] : (fetchClickUpTasksByList_(listId, false) || []);
+    const index = mode === 'create'
+      ? { byPlanoKey: {}, byPlanoBase: {}, byTaskName: {}, byTaskId: {} }
+      : indexClickUpTasksByPlano_(tasks);
     const stats = { total: rows.length, created: 0, updated: 0, linked: 0, errors: 0, skipped: 0 };
 
     // Feedback visual em massa: marca todas as linhas candidatas como "Verificando".
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       if (!row || !row.rowProgramacao || !row.plano) continue;
-      if (!row.perfil) continue;
+      if (getClickUpProgramacaoMissingRequiredFields_(row).length) continue;
       if (!cols.programacao.clickupStatusCol) continue;
       const statusCell = cols.programacao.sheet.getRange(row.rowProgramacao, cols.programacao.clickupStatusCol);
       setProgramacaoClickUpStatusCell_(statusCell, 'VERIFICANDO', 'Fila de verificacao ClickUp iniciada');
@@ -2284,14 +2621,16 @@ function runClickUpCardsProgramacao_(options) {
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
+      let step = 'init_row';
       const linkCell = cols.programacao.sheet.getRange(row.rowProgramacao, cols.programacao.clickupCol);
       const statusCell = cols.programacao.clickupStatusCol ? cols.programacao.sheet.getRange(row.rowProgramacao, cols.programacao.clickupStatusCol) : null;
       const currentLink = String(linkCell.getDisplayValue() || '').trim();
       if (!row.plano) { stats.skipped++; continue; }
-      if (!row.perfil) {
-        upsertProgramacaoClickUpCell_(linkCell, getClickUpProgramacaoConfig_().ERROR_PREFIX + ' Campos obrigatorios ausentes');
-        setProgramacaoClickUpStatusCell_(statusCell, 'ERRO', 'Campos obrigatorios ausentes: PERFIL');
-        stats.errors++;
+      const missingRequired = getClickUpProgramacaoMissingRequiredFields_(row);
+      if (missingRequired.length) {
+        const statusInfo = resolveClickUpMissingRequiredStatus_(missingRequired);
+        setProgramacaoClickUpStatusCell_(statusCell, statusInfo.code, statusInfo.note);
+        stats.skipped++;
         continue;
       }
       setProgramacaoClickUpStatusCell_(statusCell, 'VERIFICANDO', 'Verificando card e campos no ClickUp');
@@ -2299,7 +2638,8 @@ function runClickUpCardsProgramacao_(options) {
       let task = null;
       let taskId = extractClickUpTaskIdFromUrl_(currentLink);
       try {
-        if (!taskId) {
+        step = 'resolve_task';
+        if (!taskId && mode !== 'create') {
           const found = findExistingClickUpTaskForPlano_(row, index);
           if (found) {
             task = found.task;
@@ -2321,7 +2661,11 @@ function runClickUpCardsProgramacao_(options) {
           continue;
         }
         if (!taskId) {
+          step = 'clone_task';
           row.clickupTaskName = buildClickUpTaskNameProgramacao_(row, index);
+          if (mode === 'create') {
+            setProgramacaoClickUpStatusCell_(statusCell, 'PREENCHENDO', 'Clonando card template no ClickUp');
+          }
           task = createClickUpTaskProgramacao_(row);
           taskId = String(task && task.id || '');
           if (taskId) stats.created++;
@@ -2329,10 +2673,14 @@ function runClickUpCardsProgramacao_(options) {
           stats.linked += task && task.url ? 1 : 0;
         }
         if (!taskId) throw new Error('Falha ao criar/localizar task');
-        setProgramacaoClickUpStatusCell_(statusCell, 'PREENCHENDO', 'Preenchendo campos do card no ClickUp');
-        const fieldSync = updateClickUpTaskCustomFieldsProgramacao_(taskId, row);
         const finalUrl = task && task.url ? String(task.url) : ('https://app.clickup.com/t/' + taskId);
         upsertProgramacaoClickUpCell_(linkCell, finalUrl);
+        step = 'sync_fields';
+        setProgramacaoClickUpStatusCell_(statusCell, 'PREENCHENDO', 'Preenchendo campos do card no ClickUp');
+        const fieldSync = updateClickUpTaskCustomFieldsProgramacao_(taskId, row, {
+          includePlaca: true,
+          softFail: mode === 'create',
+        });
         setProgramacaoClickUpStatusCell_(statusCell, fieldSync.hasErrors ? 'ERRO' : (fieldSync.complete ? 'COMPLETO' : 'PARCIAL'), fieldSync.note);
         stats.updated++;
         if (fieldSync.hasErrors) stats.errors++;
@@ -2348,6 +2696,16 @@ function runClickUpCardsProgramacao_(options) {
         if (taskNameForIndex) index.byTaskName[normalizeHeader_(taskNameForIndex)] = { task: Object.assign({}, task || {}, { id: taskId, url: finalUrl, name: taskNameForIndex }) };
         if (mode !== 'fill') Utilities.sleep(200);
       } catch (e) {
+        appCodeLog_('[ERRO] ClickUp run row', {
+          mode: mode,
+          step: step,
+          rowProgramacao: row && row.rowProgramacao ? row.rowProgramacao : '',
+          plano: row && row.plano ? row.plano : '',
+          clickupLinkAtual: currentLink,
+          taskId: taskId || '',
+          message: e && e.message ? e.message : String(e),
+          stack: e && e.stack ? String(e.stack).slice(0, 600) : '',
+        });
         upsertProgramacaoClickUpCell_(linkCell, getClickUpProgramacaoConfig_().ERROR_PREFIX + ' ' + truncateText_(e && e.message ? e.message : String(e), 90));
         setProgramacaoClickUpStatusCell_(statusCell, 'ERRO', String(e && e.message ? e.message : e));
         stats.errors++;
@@ -2374,10 +2732,11 @@ function runClickUpFillProgramacaoBatch_(rows, cols, index, stats) {
       const statusCell = cols.programacao.clickupStatusCol ? sheet.getRange(row.rowProgramacao, cols.programacao.clickupStatusCol) : null;
       const currentLink = String(linkCell.getDisplayValue() || '').trim();
       if (!row.plano) { stats.skipped++; continue; }
-      if (!row.perfil) {
-        upsertProgramacaoClickUpCell_(linkCell, getClickUpProgramacaoConfig_().ERROR_PREFIX + ' Campos obrigatorios ausentes');
-        setProgramacaoClickUpStatusCell_(statusCell, 'ERRO', 'Campos obrigatorios ausentes: PERFIL');
-        stats.errors++;
+      const missingRequired = getClickUpProgramacaoMissingRequiredFields_(row);
+      if (missingRequired.length) {
+        const statusInfo = resolveClickUpMissingRequiredStatus_(missingRequired);
+        setProgramacaoClickUpStatusCell_(statusCell, statusInfo.code, statusInfo.note);
+        stats.skipped++;
         continue;
       }
       let task = null;
@@ -2418,7 +2777,10 @@ function runClickUpFillProgramacaoBatch_(rows, cols, index, stats) {
     for (let i = 0; i < prepared.length; i++) {
       const item = prepared[i];
       try {
-        const fieldSync = updateClickUpTaskCustomFieldsProgramacao_(item.taskId, item.row);
+        const fieldSync = updateClickUpTaskCustomFieldsProgramacao_(item.taskId, item.row, {
+          includePlaca: true,
+          softFail: true,
+        });
         const finalUrl = item.task && item.task.url ? String(item.task.url) : ('https://app.clickup.com/t/' + item.taskId);
         upsertProgramacaoClickUpCell_(item.linkCell, finalUrl);
         setProgramacaoClickUpStatusCell_(item.statusCell, fieldSync.hasErrors ? 'ERRO' : (fieldSync.complete ? 'COMPLETO' : 'PARCIAL'), fieldSync.note);
@@ -2687,12 +3049,18 @@ function resolveClickUpTaskNameForProgramacao_(taskId, taskObj, fallbackName) {
   return String(fallbackName || '').trim();
 }
 
-function getClickUpProgramacaoFieldEntries_(rowCtx) {
+function getClickUpProgramacaoFieldEntries_(rowCtx, options) {
+  const opts = options || {};
+  const includePlaca = opts.includePlaca !== false;
   const c = (getClickUpProgramacaoConfig_().CUSTOM_FIELDS || {});
-  const loadingDate = parseDateBR_(rowCtx.dataCarregamento) || toDateOnly_(rowCtx.dataCarregamento);
-  const loadingDateText = rowCtx.dataCarregamento
-    ? Utilities.formatDate(loadingDate || new Date(rowCtx.dataCarregamento), Session.getScriptTimeZone(), 'dd/MM/yyyy')
-    : '';
+  const dateFromSheet = rowCtx ? rowCtx.dataSaida : '';
+  const loadingDate = parseDateBR_(dateFromSheet) || toDateOnly_(dateFromSheet);
+  const loadingDateText = loadingDate
+    ? Utilities.formatDate(loadingDate, Session.getScriptTimeZone(), 'dd/MM/yyyy')
+    : String(dateFromSheet == null ? '' : dateFromSheet).trim();
+  const loadingDateTs = loadingDate
+    ? new Date(loadingDate.getFullYear(), loadingDate.getMonth(), loadingDate.getDate(), 12, 0, 0, 0).getTime()
+    : null;
   const entries = [];
   function add(id, value) {
     if (!id || value == null || value === '') return;
@@ -2701,16 +3069,46 @@ function getClickUpProgramacaoFieldEntries_(rowCtx) {
   add(c.PLAN, String(rowCtx.clickupTaskName || rowCtx.plano || ''));
   add(c.UNIT, normalizeClickUpUnitValueProgramacao_(getClickUpProgramacaoConfig_().UNIT_DEFAULT || 'GUARULHOS'));
   const invoice = normalizeInvoiceValueClickUpProgramacao_(rowCtx.valor);
+  const weight = normalizeClickUpNumericFieldValue_(rowCtx.peso, { decimals: 3 });
+  const deliveries = normalizeClickUpNumericFieldValue_(rowCtx.entregas, { decimals: 0 });
   add(c.INVOICE_VALUE, invoice);
-  add(c.WEIGHT, rowCtx.peso ? String(rowCtx.peso) : '');
-  add(c.DELIVERIES, rowCtx.entregas ? String(rowCtx.entregas) : '');
+  add(c.WEIGHT, weight == null ? '' : weight);
+  add(c.DELIVERIES, deliveries == null ? '' : deliveries);
   add(c.MODALITY, rowCtx.perfil ? String(rowCtx.perfil).toUpperCase().trim() : '');
   add(c.LOADING_DATE_TEXT, loadingDateText);
-  if (loadingDate) add(c.LOADING_DATE_TS, loadingDate.getTime());
+  if (loadingDateTs != null) add(c.LOADING_DATE_TS, loadingDateTs);
   add(c.CREATED_AT_TS, new Date().getTime());
-  add(c.PLACA_BOT, rowCtx.placa ? String(rowCtx.placa) : '');
+  if (includePlaca) add(c.PLACA_BOT, rowCtx.placa ? String(rowCtx.placa) : '');
   add(c.JANELA_COLETA, rowCtx.faixaAgendaProgramacao ? String(rowCtx.faixaAgendaProgramacao) : '');
   return entries;
+}
+
+function normalizeClickUpNumericFieldValue_(rawValue, options) {
+  const opts = options || {};
+  const decimals = Number(opts.decimals);
+  const text = String(rawValue == null ? '' : rawValue).trim();
+  if (!text) return null;
+
+  // Aceita "1.234,56", "1234.56", "1234", "1 234,56", etc.
+  let normalized = text.replace(/\s+/g, '');
+  if (/,/.test(normalized) && /\./.test(normalized)) {
+    normalized = normalized.replace(/\./g, '').replace(',', '.');
+  } else if (/,/.test(normalized)) {
+    normalized = normalized.replace(',', '.');
+  }
+  normalized = normalized.replace(/[^0-9.-]/g, '');
+
+  const parsed = Number(normalized);
+  if (isNaN(parsed)) return null;
+  if (isNaN(decimals)) return parsed;
+  return Number(parsed.toFixed(Math.max(0, decimals)));
+}
+
+function getClickUpProgramacaoMissingRequiredFields_(rowCtx) {
+  const missing = [];
+  if (!String((rowCtx && rowCtx.perfil) || '').trim()) missing.push('PERFIL');
+  if (!String((rowCtx && rowCtx.dataSaida) || '').trim()) missing.push('DATA DE SAIDA');
+  return missing;
 }
 
 function normalizeClickUpUnitValueProgramacao_(rawValue) {
@@ -2721,33 +3119,23 @@ function normalizeClickUpUnitValueProgramacao_(rawValue) {
 
 function createClickUpTaskProgramacao_(rowCtx) {
   const cfg = getClickUpProgramacaoConfig_();
-  const listId = cfg.LIST_ID_CARDS;
-  if (!listId) throw new Error('LIST_ID_CARDS nao configurado');
-  const url = 'https://api.clickup.com/api/v2/list/' + encodeURIComponent(listId) + '/task';
-  const payload = {
-    name: String(rowCtx.clickupTaskName || rowCtx.plano || '').trim(),
-    custom_fields: getClickUpProgramacaoFieldEntries_(rowCtx),
-  };
-  const response = UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: CONFIG.CLICKUP.TOKEN },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-  const code = response.getResponseCode();
-  const text = response.getContentText() || '';
-  if (code < 200 || code >= 300) throw new Error('ClickUp create HTTP ' + code + ': ' + text.slice(0, 200));
-  return JSON.parse(text);
+  const templateTaskId = String(cfg.TEMPLATE_TASK_ID || '').trim() || '86aenj71r';
+  const taskName = String(rowCtx.clickupTaskName || rowCtx.plano || '').trim();
+  if (!taskName) throw new Error('Nome da task vazio para clonagem.');
+  return duplicateClickUpTaskById_(templateTaskId, taskName);
 }
 
-function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx) {
+function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx, options) {
+  const opts = options || {};
+  const includePlaca = opts.includePlaca !== false;
+  const softFail = opts.softFail === true;
   const cfg = getClickUpProgramacaoConfig_();
   const c = cfg.CUSTOM_FIELDS || {};
-  const placaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, c.PLACA_BOT, ['🤖 PLACA', 'PLACA']);
-  const janelaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, c.JANELA_COLETA, ['⚠️ Janela de coleta', 'Janela de coleta']);
+  const placaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, c.PLACA_BOT, ['?? PLACA', 'PLACA']);
+  const janelaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, c.JANELA_COLETA, ['?? Janela de coleta', 'Janela de coleta']);
   const attempted = [];
   const errors = [];
+  const warnings = [];
   const missing = [];
 
   function trySetField_(id, value, label, optional) {
@@ -2781,7 +3169,7 @@ function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx) {
   for (let i = 0; i < baseEntries.length; i++) {
     const item = baseEntries[i];
     if (planFieldId && String(item.id || '').trim() === planFieldId && !resolvedPlanName) {
-      // Nao sobrescreve 🤖 PLANO com valor base quando o nome completo da task nao foi resolvido.
+      // Nao sobrescreve ?? PLANO com valor base quando o nome completo da task nao foi resolvido.
       continue;
     }
     pendingFieldRequests.push({
@@ -2793,10 +3181,34 @@ function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx) {
   }
 
   // Extras independentes: PLACA nao depende de agenda.
-  trySetField_(placaFieldIdResolved, rowCtx && rowCtx.placa, '\uD83E\uDD16 PLACA', false);
-  trySetField_(janelaFieldIdResolved, rowCtx && rowCtx.faixaAgendaProgramacao, '\u26A0\uFE0F Janela', true);
+  if (includePlaca) {
+    trySetField_(placaFieldIdResolved, rowCtx && rowCtx.placa, '\uD83E\uDD16 PLACA', false);
+  }
+  const agendaValue =
+    String((rowCtx && rowCtx.faixaAgendaProgramacao) || '').trim() ||
+    String((rowCtx && rowCtx.agendaCarregamento) || '').trim() ||
+    String((rowCtx && rowCtx.horarioAgendaMsgBase) || '').trim();
+  trySetField_(janelaFieldIdResolved, agendaValue, '\u26A0\uFE0F Janela', false);
 
-  if (!String((rowCtx && rowCtx.faixaAgendaProgramacao) || '').trim()) missing.push('Faixa de agenda');
+  const placaInput = String((rowCtx && rowCtx.placa) || '').trim();
+  const agendaInput = String(agendaValue || '').trim();
+  if (!placaInput) missing.push('Placa');
+  if (!agendaInput) missing.push('Faixa de agenda');
+  if (!janelaFieldIdResolved) {
+    appCodeLog_('[DEBUG] ClickUp Janela sem fieldId resolvido', {
+      taskId: taskId,
+      configuredFieldId: String(c.JANELA_COLETA || ''),
+      agendaValue: agendaInput,
+    });
+  } else if (!agendaInput) {
+    appCodeLog_('[DEBUG] ClickUp Janela sem valor de agenda', {
+      taskId: taskId,
+      rowProgramacao: rowCtx && rowCtx.rowProgramacao ? rowCtx.rowProgramacao : '',
+      faixaAgendaProgramacao: String((rowCtx && rowCtx.faixaAgendaProgramacao) || ''),
+      agendaCarregamento: String((rowCtx && rowCtx.agendaCarregamento) || ''),
+      horarioAgendaMsgBase: String((rowCtx && rowCtx.horarioAgendaMsgBase) || ''),
+    });
+  }
 
   // Atualiza os fields em lote (massa) para este card.
   if (pendingFieldRequests.length) {
@@ -2808,23 +3220,228 @@ function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx) {
       const resp = responses[i];
       const meta = pendingFieldRequests[i];
       const code = resp.getResponseCode();
+      const bodyText = String(resp.getContentText() || '');
+      const isCriticalField = /PLACA|Janela/i.test(String(meta.label || ''));
+      const isJanelaFieldLabel = /Janela/i.test(String(meta.label || ''));
+      const isWeightField = String(meta.fieldId || '').trim() === String(c.WEIGHT || '').trim();
+      const isInvoiceField = String(meta.fieldId || '').trim() === String(c.INVOICE_VALUE || '').trim();
       if (code >= 200 && code < 300) {
         attempted.push(meta.label);
+      } else if (isJanelaFieldLabel && code === 400) {
+        const fallback = trySetClickUpJanelaWithFallback_(taskId, meta.fieldId, meta.value);
+        if (fallback.ok) {
+          attempted.push(meta.label);
+          appCodeLog_('[DEBUG] ClickUp Janela fallback aplicado', {
+            taskId: taskId,
+            fieldId: meta.fieldId,
+            strategy: fallback.strategy,
+          });
+        } else if (softFail) {
+          errors.push(meta.label + ': ClickUp field HTTP 400 (fallback falhou): ' + String(fallback.message || '').slice(0, 140));
+        } else {
+          errors.push(meta.label + ': ClickUp field HTTP 400 (fallback falhou): ' + String(fallback.message || '').slice(0, 140));
+        }
+      } else if (isWeightField && code === 400) {
+        const fallbackPeso = trySetClickUpWeightWithFallback_(taskId, meta.fieldId, rowCtx && rowCtx.peso);
+        if (fallbackPeso.ok) {
+          attempted.push(meta.label);
+          appCodeLog_('[DEBUG] ClickUp Peso fallback aplicado', {
+            taskId: taskId,
+            fieldId: meta.fieldId,
+            strategy: fallbackPeso.strategy,
+          });
+        } else if (softFail) {
+          warnings.push(meta.label + ': ignorado (peso HTTP 400)');
+        } else {
+          errors.push(meta.label + ': ClickUp peso HTTP 400 (fallback falhou): ' + String(fallbackPeso.message || '').slice(0, 140));
+        }
+      } else if (isInvoiceField && code === 400) {
+        const fallbackNf = trySetClickUpInvoiceWithFallback_(taskId, meta.fieldId, rowCtx && rowCtx.valor);
+        if (fallbackNf.ok) {
+          attempted.push(meta.label);
+          appCodeLog_('[DEBUG] ClickUp Valor NF fallback aplicado', {
+            taskId: taskId,
+            fieldId: meta.fieldId,
+            strategy: fallbackNf.strategy,
+          });
+        } else if (softFail) {
+          warnings.push(meta.label + ': ignorado (valor_nf HTTP 400)');
+        } else {
+          errors.push(meta.label + ': ClickUp valor_nf HTTP 400 (fallback falhou): ' + String(fallbackNf.message || '').slice(0, 140));
+        }
+      } else if (code === 401 && bodyText.indexOf('ACCESS_606') !== -1) {
+        if (isCriticalField) {
+          errors.push(meta.label + ': sem permissao para editar campo no ClickUp (ACCESS_606)');
+        } else {
+          warnings.push(meta.label + ': sem permissao para editar campo no ClickUp');
+          appCodeLog_('[WARN] ClickUp campo sem permissao (ACCESS_606)', {
+            taskId: taskId,
+            fieldLabel: meta.label,
+            fieldId: meta.fieldId,
+            httpCode: code,
+            responsePreview: bodyText.slice(0, 250),
+          });
+        }
+      } else if (softFail) {
+        if (isCriticalField) {
+          errors.push(meta.label + ': ClickUp field HTTP ' + code + ': ' + bodyText.slice(0, 140));
+        } else {
+          warnings.push(meta.label + ': ignorado (HTTP ' + code + ')');
+        }
       } else {
-        errors.push(meta.label + ': ClickUp field HTTP ' + code + ': ' + (resp.getContentText() || '').slice(0, 140));
+        errors.push(meta.label + ': ClickUp field HTTP ' + code + ': ' + bodyText.slice(0, 140));
       }
     }
   }
 
-  const complete = missing.length === 0 && errors.length === 0;
+  const effectiveErrors = softFail
+    ? errors.filter(function (e) { return /PLACA|Janela|Faixa de agenda/i.test(String(e || '')); })
+    : errors;
+  const complete = missing.length === 0 && effectiveErrors.length === 0;
   const parts = [];
   if (missing.length) parts.push('Faltando: ' + missing.join(', '));
-  if (errors.length) parts.push('Erros: ' + truncateText_(errors.join(' | '), 180));
+  if (warnings.length) parts.push('Avisos: ' + truncateText_(warnings.join(' | '), 180));
+  if (effectiveErrors.length) parts.push('Erros: ' + truncateText_(effectiveErrors.join(' | '), 180));
   return {
     complete: complete,
-    hasErrors: errors.length > 0,
+    hasErrors: effectiveErrors.length > 0,
     note: complete ? ('Campos sincronizados (' + attempted.length + ')') : ('Parcial: ' + parts.join(' | ')),
   };
+}
+
+function trySetClickUpJanelaWithFallback_(taskId, fieldId, rawValue) {
+  const taskIdStr = String(taskId || '').trim();
+  const fieldIdStr = String(fieldId || '').trim();
+  const raw = String(rawValue == null ? '' : rawValue).trim();
+  if (!taskIdStr || !fieldIdStr || !raw) return { ok: false, message: 'dados insuficientes para fallback' };
+
+  let meta = null;
+  try { meta = getClickUpTaskCustomFieldMeta_(taskIdStr, fieldIdStr); } catch (e) { meta = null; }
+  const options = asArray_(meta && meta.type_config && meta.type_config.options);
+  if (!options.length) return { ok: false, message: 'campo sem options para dropdown' };
+
+  const rawNorm = normalizeHeader_(raw);
+  const rawRangeNorm = normalizeJanelaColetaOptionText_(raw);
+  let found = null;
+  for (let i = 0; i < options.length; i++) {
+    const opt = options[i] || {};
+    const name = String(opt.name || '').trim();
+    if (!name) continue;
+    if (
+      name === raw ||
+      normalizeHeader_(name) === rawNorm ||
+      normalizeJanelaColetaOptionText_(name) === rawRangeNorm
+    ) {
+      found = opt;
+      break;
+    }
+  }
+  if (!found) return { ok: false, message: 'opcao nao encontrada para "' + raw + '"' };
+
+  const candidates = [];
+  const optId = String(found.id || '').trim();
+  const optUuid = String(found.uuid || '').trim();
+  const optOrder = found.orderindex != null && String(found.orderindex).trim() !== '' ? Number(found.orderindex) : null;
+  const optName = String(found.name || '').trim();
+
+  if (optId) candidates.push({ value: optId, strategy: 'id' });
+  if (optUuid && optUuid !== optId) candidates.push({ value: optUuid, strategy: 'uuid' });
+  if (optOrder != null && !isNaN(optOrder)) candidates.push({ value: optOrder, strategy: 'orderindex_number' });
+  if (optOrder != null && !isNaN(optOrder)) candidates.push({ value: String(optOrder), strategy: 'orderindex_string' });
+  if (optName) candidates.push({ value: optName, strategy: 'name' });
+  if (raw && raw !== optName) candidates.push({ value: raw, strategy: 'raw' });
+
+  let lastMessage = '';
+  const url = CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(taskIdStr) + '/field/' + encodeURIComponent(fieldIdStr);
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      muteHttpExceptions: true,
+      contentType: 'application/json',
+      headers: { Authorization: getClickUpApiKey_() },
+      payload: JSON.stringify({ value: c.value }),
+    });
+    const code = response.getResponseCode();
+    const text = String(response.getContentText() || '');
+    if (code >= 200 && code < 300) {
+      return { ok: true, strategy: c.strategy };
+    }
+    lastMessage = 'HTTP ' + code + ': ' + text.slice(0, 180);
+  }
+  return { ok: false, message: lastMessage || 'nao foi possivel aplicar fallback' };
+}
+
+function trySetClickUpWeightWithFallback_(taskId, fieldId, rawWeight) {
+  const taskIdStr = String(taskId || '').trim();
+  const fieldIdStr = String(fieldId || '').trim();
+  const raw = String(rawWeight == null ? '' : rawWeight).trim();
+  if (!taskIdStr || !fieldIdStr || !raw) return { ok: false, message: 'peso vazio ou ids invalidos' };
+
+  const normalized = normalizeClickUpNumericFieldValue_(raw, { decimals: 3 });
+  const candidates = [];
+  if (normalized != null && !isNaN(normalized)) {
+    candidates.push({ value: normalized, strategy: 'number_3_decimals' });
+    candidates.push({ value: Number(normalized.toFixed(2)), strategy: 'number_2_decimals' });
+    candidates.push({ value: Number(normalized.toFixed(0)), strategy: 'number_integer' });
+    candidates.push({ value: String(normalized), strategy: 'string_dot' });
+    candidates.push({ value: String(normalized).replace('.', ','), strategy: 'string_comma' });
+  }
+  candidates.push({ value: raw, strategy: 'raw' });
+
+  const url = CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(taskIdStr) + '/field/' + encodeURIComponent(fieldIdStr);
+  let lastMessage = '';
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      muteHttpExceptions: true,
+      contentType: 'application/json',
+      headers: { Authorization: getClickUpApiKey_() },
+      payload: JSON.stringify({ value: c.value }),
+    });
+    const code = response.getResponseCode();
+    const text = String(response.getContentText() || '');
+    if (code >= 200 && code < 300) return { ok: true, strategy: c.strategy };
+    lastMessage = 'HTTP ' + code + ': ' + text.slice(0, 180);
+  }
+  return { ok: false, message: lastMessage || 'fallback de peso falhou' };
+}
+
+function trySetClickUpInvoiceWithFallback_(taskId, fieldId, rawInvoice) {
+  const taskIdStr = String(taskId || '').trim();
+  const fieldIdStr = String(fieldId || '').trim();
+  const raw = String(rawInvoice == null ? '' : rawInvoice).trim();
+  if (!taskIdStr || !fieldIdStr || !raw) return { ok: false, message: 'valor_nf vazio ou ids invalidos' };
+
+  const normalized = normalizeInvoiceValueClickUpProgramacao_(raw);
+  const numeric = normalized == null || isNaN(Number(normalized)) ? null : Number(normalized);
+  const candidates = [];
+  if (numeric != null) {
+    candidates.push({ value: numeric, strategy: 'number' });
+    candidates.push({ value: Number(numeric.toFixed(2)), strategy: 'number_2_decimals' });
+    candidates.push({ value: String(numeric), strategy: 'string_dot' });
+    candidates.push({ value: String(numeric).replace('.', ','), strategy: 'string_comma' });
+  }
+  candidates.push({ value: raw, strategy: 'raw' });
+
+  const url = CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(taskIdStr) + '/field/' + encodeURIComponent(fieldIdStr);
+  let lastMessage = '';
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      muteHttpExceptions: true,
+      contentType: 'application/json',
+      headers: { Authorization: getClickUpApiKey_() },
+      payload: JSON.stringify({ value: c.value }),
+    });
+    const code = response.getResponseCode();
+    const text = String(response.getContentText() || '');
+    if (code >= 200 && code < 300) return { ok: true, strategy: c.strategy };
+    lastMessage = 'HTTP ' + code + ': ' + text.slice(0, 180);
+  }
+  return { ok: false, message: lastMessage || 'fallback de valor_nf falhou' };
 }
 
 function buildClickUpTaskCustomFieldRequest_(taskId, fieldId, value) {
@@ -2833,7 +3450,7 @@ function buildClickUpTaskCustomFieldRequest_(taskId, fieldId, value) {
     url: CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(taskId) + '/field/' + encodeURIComponent(fieldId),
     method: 'post',
     contentType: 'application/json',
-    headers: { Authorization: CONFIG.CLICKUP.TOKEN },
+    headers: { Authorization: getClickUpApiKey_() },
     payload: JSON.stringify({ value: apiValue }),
     muteHttpExceptions: true,
   };
@@ -2846,7 +3463,7 @@ function setClickUpTaskCustomFieldValue_(taskId, fieldId, value) {
   const response = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
-    headers: { Authorization: CONFIG.CLICKUP.TOKEN },
+    headers: { Authorization: getClickUpApiKey_() },
     payload: JSON.stringify({ value: apiValue }),
     muteHttpExceptions: true,
   });
@@ -2865,7 +3482,7 @@ function normalizeClickUpCustomFieldValueForApi_(taskId, fieldId, value) {
   try { meta = getClickUpTaskCustomFieldMeta_(taskId, fieldIdStr); } catch (e) { meta = null; }
   const fieldNameNorm = normalizeHeader_(meta && meta.name ? meta.name : '');
   const isJanelaField =
-    fieldNameNorm === normalizeHeader_('⚠️ Janela de coleta') ||
+    fieldNameNorm === normalizeHeader_('?? Janela de coleta') ||
     fieldNameNorm === normalizeHeader_('Janela de coleta') ||
     (cfs.JANELA_COLETA && fieldIdStr === String(cfs.JANELA_COLETA));
 
@@ -2891,20 +3508,57 @@ function normalizeClickUpCustomFieldValueForApi_(taskId, fieldId, value) {
     if (!found) {
       throw new Error('Opcao dropdown nao encontrada para Janela de coleta: ' + raw);
     }
+    const orderIndex = found.orderindex != null && String(found.orderindex).trim() !== ''
+      ? Number(found.orderindex)
+      : null;
     const optionUuid = String(found.id || found.uuid || '').trim();
+    appCodeLog_('[DEBUG] ClickUp Janela match', {
+      taskId: String(taskId || ''),
+      fieldId: fieldIdStr,
+      raw: raw,
+      matchedName: String(found.name || ''),
+      hasOrderIndex: orderIndex != null,
+      hasUuid: !!optionUuid,
+    });
+    if (orderIndex != null && !isNaN(orderIndex)) return orderIndex;
     if (optionUuid) return optionUuid;
-    if (found.orderindex != null && String(found.orderindex).trim() !== '') return Number(found.orderindex);
     throw new Error('Opcao dropdown sem id/uuid/orderindex para Janela de coleta');
   }
   return value;
 }
 
 function normalizeJanelaColetaOptionText_(text) {
-  return String(text == null ? '' : text)
+  const raw = String(text == null ? '' : text);
+  const canonicalRange = extractTimeRangeKey_(raw);
+  if (canonicalRange) return canonicalRange;
+  return raw
     .trim()
     .replace(/\s*-\s*/g, '-')
+    .replace(/\s*[àa]\s*s?\s*/gi, '-')
+    .replace(/\s*as\s*/gi, '-')
+    .replace(/h/g, ':00')
     .replace(/\s+/g, ' ')
     .toUpperCase();
+}
+
+function extractTimeRangeKey_(text) {
+  const raw = String(text == null ? '' : text);
+  const matches = raw.match(/(\d{1,2})(?::(\d{2}))?/g);
+  if (!matches || matches.length < 2) return '';
+
+  function toHm_(token) {
+    const m = String(token || '').match(/^(\d{1,2})(?::(\d{2}))?$/);
+    if (!m) return '';
+    const h = Number(m[1]);
+    const min = Number(m[2] || '0');
+    if (isNaN(h) || isNaN(min) || h < 0 || h > 23 || min < 0 || min > 59) return '';
+    return pad2_(h) + ':' + pad2_(min);
+  }
+
+  const start = toHm_(matches[0]);
+  const end = toHm_(matches[1]);
+  if (!start || !end) return '';
+  return start + '-' + end;
 }
 
 function getClickUpTaskCustomFieldMeta_(taskId, fieldId) {
@@ -2915,7 +3569,7 @@ function getClickUpTaskCustomFieldMeta_(taskId, fieldId) {
   const url = CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(String(taskId || '').trim());
   const response = UrlFetchApp.fetch(url, {
     method: 'get',
-    headers: { Authorization: CONFIG.CLICKUP.TOKEN },
+    headers: { Authorization: getClickUpApiKey_() },
     muteHttpExceptions: true,
   });
   const code = response.getResponseCode();
@@ -2942,7 +3596,7 @@ function getClickUpTaskCustomFieldsByName_(taskId) {
   const url = CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(taskIdStr);
   const response = UrlFetchApp.fetch(url, {
     method: 'get',
-    headers: { Authorization: CONFIG.CLICKUP.TOKEN },
+    headers: { Authorization: getClickUpApiKey_() },
     muteHttpExceptions: true,
   });
   const code = response.getResponseCode();
@@ -2981,6 +3635,21 @@ function resolveClickUpProgramacaoFieldIdByName_(taskId, configuredId, candidate
     const cf = byName.get(normalizeHeader_(names[i]));
     if (cf && String(cf.id || '').trim()) return String(cf.id || '').trim();
   }
+
+  // Fallback tolerante: alguns workspaces mudam o label (emoji/prefixo), mas mantem "JANELA"/"COLETA".
+  let keywordMatch = '';
+  byName.forEach(function (cf, normalizedName) {
+    if (keywordMatch) return;
+    const n = String(normalizedName || '');
+    if (n.indexOf('JANELA') !== -1 && n.indexOf('COLETA') !== -1) {
+      const id = String((cf && cf.id) || '').trim();
+      if (id) keywordMatch = id;
+    }
+  });
+  if (keywordMatch) return keywordMatch;
+
+  // Ultimo fallback: usa o ID configurado mesmo sem metadata, para tentar escrita direta.
+  if (cfgId) return cfgId;
   return '';
 }
 
@@ -2993,6 +3662,14 @@ function upsertProgramacaoClickUpCell_(cell, valueOrStatus) {
   cell.setValue(String(valueOrStatus || '').trim());
 }
 
+function resolveClickUpMissingRequiredStatus_(missingRequired) {
+  const missing = asArray_(missingRequired).map(function (v) { return String(v || '').trim(); }).filter(Boolean);
+  if (missing.length === 1 && missing[0] === 'DATA DE SAIDA') {
+    return { code: 'AGUARDANDO_DATA_SAIDA', note: 'Aguardando DATA DE SAIDA' };
+  }
+  return { code: 'PARCIAL', note: 'Bloqueado: Campos obrigatorios ausentes: ' + missing.join(', ') };
+}
+
 function setProgramacaoClickUpStatusCell_(cell, code, note) {
   if (!cell) return;
   const c = String(code || '').toUpperCase();
@@ -3000,6 +3677,7 @@ function setProgramacaoClickUpStatusCell_(cell, code, note) {
   if (c === 'COMPLETO') label = '\ud83d\udfe2 Mover para o mapa';
   else if (c === 'NO_MAPA') label = '\ud83d\udfe2 No mapa';
   else if (c === 'PARCIAL') label = '\ud83d\udfe1 Parcial';
+  else if (c === 'AGUARDANDO_DATA_SAIDA') label = '\ud83d\udfe1 Aguardando DATA DE SAIDA';
   else if (c === 'ERRO') label = '\ud83d\udd34 Erro';
   else if (c === 'VERIFICANDO') label = '\ud83d\udd35 Verificando';
   else if (c === 'PREENCHENDO') label = '\ud83d\udd35 Preenchendo';
@@ -3017,7 +3695,11 @@ function normalizeInvoiceValueClickUpProgramacao_(rawValue) {
   if (typeof rawValue === 'number') return rawValue;
   var value = String(rawValue || '').trim();
   if (!value) return null;
-  if (value.indexOf('.') !== -1 && value.indexOf(',') !== -1) return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+  value = value.replace(/[R$\s]/g, '').replace(/[^0-9,.-]/g, '');
+  if (!value) return null;
+  if (value.indexOf('.') !== -1 && value.indexOf(',') !== -1) {
+    return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+  }
   if (value.indexOf(',') !== -1) return parseFloat(value.replace(',', '.'));
   const n = parseFloat(value);
   return isNaN(n) ? null : n;
@@ -3028,6 +3710,16 @@ function syncClickUpProgramacaoOnEditRow_(sheet, rowNumber, cols, options) {
   const pcols = (cols || findRequiredColumns_()).programacao;
   if (!pcols.clickupCol || !pcols.planosCol) return;
   const rowVals = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const statusCell = pcols.clickupStatusCol ? sheet.getRange(rowNumber, pcols.clickupStatusCol) : null;
+  if (!pcols.dataSaidaCol) {
+    setProgramacaoClickUpStatusCell_(statusCell, 'ERRO', 'Coluna obrigatoria ausente: DATA DE SAIDA');
+    return;
+  }
+  const dataSaida = String(rowVals[pcols.dataSaidaCol - 1] || '').trim();
+  if (!dataSaida) {
+    setProgramacaoClickUpStatusCell_(statusCell, 'AGUARDANDO_DATA_SAIDA', 'Aguardando DATA DE SAIDA');
+    return;
+  }
   const plano = String(rowVals[pcols.planosCol - 1] || '').trim();
   if (!plano) return;
   let taskId = extractClickUpTaskIdFromUrl_(rowVals[pcols.clickupCol - 1]);
@@ -3041,8 +3733,8 @@ function syncClickUpProgramacaoOnEditRow_(sheet, rowNumber, cols, options) {
   }
   if (!taskId) return;
   const cfs = getClickUpProgramacaoConfig_().CUSTOM_FIELDS || {};
-  const placaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, cfs.PLACA_BOT, ['🤖 PLACA', 'PLACA']);
-  const janelaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, cfs.JANELA_COLETA, ['⚠️ Janela de coleta', 'Janela de coleta']);
+  const placaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, cfs.PLACA_BOT, ['?? PLACA', 'PLACA']);
+  const janelaFieldIdResolved = resolveClickUpProgramacaoFieldIdByName_(taskId, cfs.JANELA_COLETA, ['?? Janela de coleta', 'Janela de coleta']);
   if (opts.syncPlaca && placaFieldIdResolved && pcols.placaCol) {
     const placa = String(rowVals[pcols.placaCol - 1] || '').trim();
     if (placa) setClickUpTaskCustomFieldValue_(taskId, placaFieldIdResolved, placa);
@@ -3792,7 +4484,7 @@ function fetchClickUpTasksByList_(listId, debug) {
       method: 'get',
       muteHttpExceptions: true,
       headers: {
-        Authorization: CONFIG.CLICKUP.TOKEN,
+        Authorization: getClickUpApiKey_(),
         'Content-Type': 'application/json',
       },
     });
@@ -3854,7 +4546,7 @@ function fetchClickUpTaskById_(taskId) {
     method: 'get',
     muteHttpExceptions: true,
     headers: {
-      Authorization: CONFIG.CLICKUP.TOKEN,
+      Authorization: getClickUpApiKey_(),
       'Content-Type': 'application/json',
     },
   });
@@ -3872,6 +4564,168 @@ function fetchClickUpTaskById_(taskId) {
   }
 }
 
+function clonarCardClickUp86aenj71rMesmoLugar(novoNome) {
+  return clonarCardClickUpBasicoNaMesmaLista_('86aenj71r', novoNome);
+}
+
+function clonarCardClickUpBasicoNaMesmaLista_(taskIdOrigem, novoNome) {
+  const sourceTaskId = extractClickUpTaskIdFromInput_(taskIdOrigem);
+  if (!sourceTaskId) throw new Error('Task de origem invalida para clone.');
+
+  const cloneName = String(novoNome || '').trim();
+  if (!cloneName) throw new Error('Informe o novo nome do card.');
+
+  const source = fetchClickUpTaskById_(sourceTaskId);
+  const listId = String(source && source.list && source.list.id ? source.list.id : '').trim();
+  const created = duplicateClickUpTaskById_(sourceTaskId, cloneName);
+  return {
+    ok: true,
+    sourceTaskId: sourceTaskId,
+    listId: listId,
+    clonedTaskId: String((created && created.id) || ''),
+    clonedTaskUrl: String((created && created.url) || ''),
+    name: cloneName,
+  };
+}
+
+function duplicateClickUpTaskById_(sourceTaskId, newName) {
+  const sourceId = String(sourceTaskId || '').trim();
+  const cloneName = String(newName || '').trim();
+  if (!sourceId) throw new Error('Task de origem invalida para clonagem.');
+  if (!cloneName) throw new Error('Nome da task de clone vazio.');
+
+  const url = CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(sourceId) + '/duplicate';
+  const headers = {
+    Authorization: getClickUpApiKey_(),
+    'Content-Type': 'application/json',
+  };
+
+  // Alguns workspaces aceitam nome no duplicate; se ignorar, renomeamos no passo seguinte.
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    muteHttpExceptions: true,
+    contentType: 'application/json',
+    headers: headers,
+    payload: JSON.stringify({ name: cloneName }),
+  });
+
+  const code = response.getResponseCode();
+  const text = response.getContentText() || '';
+  appCodeLog_('[DEBUG] ClickUp duplicate response', {
+    sourceTaskId: sourceId,
+    requestedName: cloneName,
+    httpCode: code,
+    responsePreview: String(text || '').slice(0, 300),
+  });
+  if (code === 404) {
+    appCodeLog_('[WARN] ClickUp duplicate endpoint indisponivel; usando fallback create', {
+      sourceTaskId: sourceId,
+      httpCode: code,
+    });
+    return duplicateClickUpTaskFallbackByCreate_(sourceId, cloneName);
+  }
+  if (code < 200 || code >= 300) {
+    throw new Error('ClickUp duplicate HTTP ' + code + ': ' + text.slice(0, 300));
+  }
+
+  let created = {};
+  try {
+    created = text ? JSON.parse(text) : {};
+  } catch (e) {
+    created = {};
+  }
+
+  const clonedTaskId = String((created && created.id) || '').trim();
+  if (!clonedTaskId) {
+    throw new Error('ClickUp duplicate sem id da task clonada.');
+  }
+
+  const clonedName = String((created && created.name) || '').trim();
+  if (clonedName !== cloneName) {
+    renameClickUpTask_(clonedTaskId, cloneName);
+    try {
+      created = fetchClickUpTaskById_(clonedTaskId);
+    } catch (e) {}
+  }
+
+  return created;
+}
+
+function duplicateClickUpTaskFallbackByCreate_(sourceTaskId, cloneName) {
+  const source = fetchClickUpTaskById_(sourceTaskId);
+  const listId = String(source && source.list && source.list.id ? source.list.id : '').trim();
+  if (!listId) throw new Error('Fallback clone: lista da task origem nao encontrada.');
+
+  const url =
+    CONFIG.CLICKUP.BASE_URL +
+    '/list/' +
+    encodeURIComponent(listId) +
+    '/task';
+
+  const payload = {
+    name: cloneName,
+    description: String((source && source.description) || ''),
+  };
+
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    muteHttpExceptions: true,
+    contentType: 'application/json',
+    headers: {
+      Authorization: getClickUpApiKey_(),
+      'Content-Type': 'application/json',
+    },
+    payload: JSON.stringify(payload),
+  });
+  const code = response.getResponseCode();
+  const text = response.getContentText() || '';
+  appCodeLog_('[DEBUG] ClickUp fallback create response', {
+    sourceTaskId: sourceTaskId,
+    listId: listId,
+    requestedName: cloneName,
+    httpCode: code,
+    responsePreview: String(text || '').slice(0, 300),
+  });
+  if (code < 200 || code >= 300) {
+    throw new Error('ClickUp fallback create HTTP ' + code + ': ' + text.slice(0, 300));
+  }
+
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function renameClickUpTask_(taskId, newName) {
+  const id = String(taskId || '').trim();
+  const name = String(newName || '').trim();
+  if (!id || !name) return;
+
+  const url = CONFIG.CLICKUP.BASE_URL + '/task/' + encodeURIComponent(id);
+  const response = UrlFetchApp.fetch(url, {
+    method: 'put',
+    muteHttpExceptions: true,
+    contentType: 'application/json',
+    headers: {
+      Authorization: getClickUpApiKey_(),
+      'Content-Type': 'application/json',
+    },
+    payload: JSON.stringify({ name: name }),
+  });
+  const code = response.getResponseCode();
+  const text = response.getContentText() || '';
+  appCodeLog_('[DEBUG] ClickUp rename response', {
+    taskId: id,
+    requestedName: name,
+    httpCode: code,
+    responsePreview: String(text || '').slice(0, 300),
+  });
+  if (code < 200 || code >= 300) {
+    throw new Error('ClickUp rename HTTP ' + code + ': ' + text.slice(0, 300));
+  }
+}
+
 function updateClickUpTaskStatus_(taskId, statusName) {
   const url =
     CONFIG.CLICKUP.BASE_URL +
@@ -3883,7 +4737,7 @@ function updateClickUpTaskStatus_(taskId, statusName) {
     muteHttpExceptions: true,
     contentType: 'application/json',
     headers: {
-      Authorization: CONFIG.CLICKUP.TOKEN,
+      Authorization: getClickUpApiKey_(),
       'Content-Type': 'application/json',
     },
     payload: JSON.stringify({ status: String(statusName || '').trim() }),
@@ -3897,14 +4751,78 @@ function updateClickUpTaskStatus_(taskId, statusName) {
   try { return JSON.parse(text); } catch (e) { return { ok: true, raw: text }; }
 }
 
+function deletarCardsClickUpProgramacaoFixos() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const taskIds = ['86aftz90v'];
+  const stats = { total: taskIds.length, deleted: 0, errors: [] };
+
+  for (let i = 0; i < taskIds.length; i++) {
+    const rawId = String(taskIds[i] || '').trim();
+    if (!rawId) continue;
+    try {
+      deleteClickUpTaskById_(rawId);
+      stats.deleted++;
+    } catch (e) {
+      stats.errors.push({
+        taskId: rawId,
+        error: String(e && e.message ? e.message : e),
+      });
+    }
+  }
+
+  const msg = 'ClickUp delete: excluidos=' + stats.deleted + ' | erros=' + stats.errors.length;
+  toast_(ss, msg);
+  return { ok: stats.errors.length === 0, data: stats };
+}
+
+function deleteClickUpTaskById_(taskIdOrUrl) {
+  const taskId = extractClickUpTaskIdFromInput_(taskIdOrUrl);
+  if (!taskId) throw new Error('Task ID invalido para delete.');
+
+  const url =
+    CONFIG.CLICKUP.BASE_URL +
+    '/task/' +
+    encodeURIComponent(String(taskId));
+
+  const response = UrlFetchApp.fetch(url, {
+    method: 'delete',
+    muteHttpExceptions: true,
+    headers: {
+      Authorization: getClickUpApiKey_(),
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const code = response.getResponseCode();
+  const text = response.getContentText() || '';
+  if (code < 200 || code >= 300) {
+    throw new Error('ClickUp delete HTTP ' + code + ': ' + text.slice(0, 300));
+  }
+
+  if (!text) return { ok: true };
+  try { return JSON.parse(text); } catch (e) { return { ok: true, raw: text }; }
+}
+
 function extractClickUpTaskIdFromInput_(input) {
   const text = String(input == null ? '' : input).trim();
   if (!text) return '';
+  if (/^\s*\[ERROR\]/i.test(text)) return '';
+  if (/^\s*\[BUSCANDO DADOS\]/i.test(text)) return '';
 
-  const match = text.match(/\/t\/([a-zA-Z0-9]+)/);
-  if (match && match[1]) return match[1];
+  function validTaskId_(value) {
+    const id = String(value || '').trim();
+    return /^86[a-z0-9]+$/i.test(id);
+  }
 
-  return text.replace(/[^\w-]/g, '');
+  let match = text.match(/\/t\/([a-zA-Z0-9]+)/i);
+  if (match && match[1] && validTaskId_(match[1])) return match[1];
+
+  match = text.match(/\/task\/([a-zA-Z0-9]+)/i);
+  if (match && match[1] && validTaskId_(match[1])) return match[1];
+
+  if (validTaskId_(text)) return text;
+
+  return '';
 }
 
 function parseClickUpTaskDisponibilidade_(task) {
@@ -4239,7 +5157,7 @@ function toDateOnly_(value) {
   if (typeof value === 'string') {
     const text = value.trim();
     if (!text) return null;
-    const m = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    const m = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
     if (m) {
       const d = Number(m[1]);
       const mo = Number(m[2]);
@@ -5215,12 +6133,20 @@ function buildGreenMileRouteMap_(routeKeysRaw, debug) {
 }
 
 function getGreenMileAuth_() {
+  let credentials = null;
+  try {
+    credentials = getGreenMileCredentials_();
+  } catch (e) {
+    appDebugPrint_('GreenMile login ausente (usuario/senha)', { error: e && e.message ? e.message : String(e) });
+    return { build: '1705315', version: '26.0130', module: 'LIVE', username: '', password: '', token: '' };
+  }
+
   const auth = {
     build: '1705315',
     version: '26.0130',
     module: 'LIVE',
-    username: CONFIG.GREENMILE.LOGIN_USERNAME,
-    password: CONFIG.GREENMILE.LOGIN_PASSWORD,
+    username: credentials.username,
+    password: credentials.password,
     token: '',
   };
 
@@ -5762,10 +6688,20 @@ function mapDisponibilidadeHeaders_(headers) {
 }
 
 function appDebugPrint_(message, payload) {
-  const entry = { message: message, payload: payload || {} };
+  const safeMessage = redact(String(message || ''));
+  const safePayload = redact(payload || {});
+  const entry = { message: safeMessage, payload: safePayload };
   Logger.log(JSON.stringify(entry));
   console.log(JSON.stringify(entry));
-  appendDebugLogToSheet_(message, payload || {});
+  appendDebugLogToSheet_(safeMessage, safePayload);
+}
+
+function appCodeLog_(message, payload) {
+  const safeMessage = redact(String(message || ''));
+  const safePayload = redact(payload || {});
+  const entry = { message: safeMessage, payload: safePayload };
+  Logger.log(JSON.stringify(entry));
+  console.log(JSON.stringify(entry));
 }
 
 function appDebugError_(error, ctx) {
@@ -5863,7 +6799,7 @@ function showAleatorizacaoResumoAlert_(stats, meta) {
   const s = stats || {};
   const m = meta || {};
   const linhas = [
-    '✅ Aleatorizacao concluida' + (m.debug ? ' (DEBUG)' : ''),
+    '? Aleatorizacao concluida' + (m.debug ? ' (DEBUG)' : ''),
     '',
     '• Processadas: ' + (s.processadas || 0),
     '• Atribuidas: ' + (s.atribuidas || 0),
@@ -6876,6 +7812,18 @@ function getSheetDataRowsDisplay_(sheet, totalCols, headerRow) {
   return sheet.getRange(hdrRow + 1, 1, lastRow - hdrRow, totalCols).getDisplayValues();
 }
 
+function findFirstEmptyRowInColumn_(sheet, column, startRow) {
+  const col = Math.max(1, Number(column) || 1);
+  const firstRow = Math.max(1, Number(startRow) || 1);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < firstRow) return firstRow;
+  const values = sheet.getRange(firstRow, col, lastRow - firstRow + 1, 1).getDisplayValues();
+  for (let i = 0; i < values.length; i++) {
+    if (!String(values[i][0] == null ? '' : values[i][0]).trim()) return firstRow + i;
+  }
+  return lastRow + 1;
+}
+
 function getHeaderColOptional_(headerMap, aliases) {
   for (let i = 0; i < aliases.length; i++) {
     const alias = String(aliases[i] || '');
@@ -6883,6 +7831,136 @@ function getHeaderColOptional_(headerMap, aliases) {
     if (col) return col;
   }
   return 0;
+}
+
+function getDisponibilidadeObservacaoReasons_() {
+  return [
+    'Veículo em manutenção',
+    'Veículo já carregado / em viagem',
+    'Problema com documentação',
+    'Indisponibilidade pessoal',
+    'Problema de saúde',
+    'Descanso obrigatório (Lei do motorista)',
+    'Condutor não responde aos contatos',
+    'Distância ou prazo inviável',
+    'Recusa operacional',
+    'Pane ou avaria no veículo'
+  ];
+}
+
+function buildDisponibilidadeStatusOptions_(sheet, statusCol, headerRow) {
+  const lastRow = sheet.getLastRow();
+  const values = lastRow > headerRow
+    ? sheet.getRange(headerRow + 1, statusCol, lastRow - headerRow, 1).getDisplayValues()
+    : [];
+  
+  // Opções padrão que DEVEM existir
+  const standardOptions = ['Programado', 'Disponível', 'Indisponível'];
+  const seenNorm = {};
+  standardOptions.forEach(opt => seenNorm[normalizeHeader_(opt)] = true);
+  
+  const out = [...standardOptions];
+  
+  for (let i = 0; i < values.length; i++) {
+    const raw = String(values[i][0] == null ? '' : values[i][0]).trim();
+    if (!raw) continue;
+    
+    const norm = normalizeHeader_(raw);
+    if (!norm || seenNorm[norm]) continue;
+    seenNorm[norm] = true;
+    out.push(raw);
+  }
+  
+  return out;
+}
+
+function ensureDisponibilidadeObservacaoValidation_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = findSheetCaseInsensitive_(ss, 'DISPONIBILIDADE');
+  if (!sh) sh = findSheetCaseInsensitive_(ss, 'THX');
+  if (!sh) sh = findSheetCaseInsensitive_(ss, 'DISPONIBILIDADE THX');
+  
+  if (!sh) return;
+  const headerRow = getDisponibilidadeHeaderRow_();
+  const hmap = mapHeaders_(sh, headerRow);
+  const cObs = getHeaderColOptional_(hmap, ['OBSERVACAO', 'OBSERVAÇÃO']);
+  if (!cObs) return;
+  const dv = SpreadsheetApp.newDataValidation()
+    .requireValueInList(getDisponibilidadeObservacaoReasons_(), true)
+    .build();
+  const maxRows = sh.getMaxRows();
+  sh.getRange(headerRow + 1, cObs, Math.max(1, maxRows - headerRow), 1).setDataValidation(dv);
+}
+
+function ensureDisponibilidadeStatusValidation_() {
+  const ss = SpreadsheetApp.getActive();
+  // Busca robusta que aceita 'THX' ou 'DISPONIBILIDADE'
+  let sh = findSheetCaseInsensitive_(ss, 'DISPONIBILIDADE');
+  if (!sh) sh = findSheetCaseInsensitive_(ss, 'THX');
+  if (!sh) sh = findSheetCaseInsensitive_(ss, 'DISPONIBILIDADE THX');
+  
+  if (!sh) return;
+  const headerRow = getDisponibilidadeHeaderRow_();
+  const hmap = mapHeaders_(sh, headerRow);
+  const cStatus = getHeaderColOptional_(hmap, ['DISPONIBILIDADE']);
+  if (!cStatus) return;
+  const options = buildDisponibilidadeStatusOptions_(sh, cStatus, headerRow);
+  const dv = SpreadsheetApp.newDataValidation()
+    .requireValueInList(options, true)
+    .build();
+  const maxRows = sh.getMaxRows();
+  sh.getRange(headerRow + 1, cStatus, Math.max(1, maxRows - headerRow), 1).setDataValidation(dv);
+  ensureDisponibilidadeStatusConditionalFormatting_(sh, cStatus, headerRow);
+}
+
+function columnToLetter_(col) {
+  let n = Math.max(1, Number(col) || 1);
+  let out = '';
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    out = String.fromCharCode(65 + m) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+function ensureDisponibilidadeStatusConditionalFormatting_(sheet, statusCol, headerRow) {
+  const maxRows = sheet.getMaxRows();
+  const startRow = headerRow + 1;
+  const range = sheet.getRange(startRow, statusCol, Math.max(1, maxRows - startRow + 1), 1);
+  const colLetter = columnToLetter_(statusCol);
+  
+  // Limpa regras existentes apenas para esse range para evitar duplicidade
+  const currentRules = sheet.getConditionalFormatRules();
+  const otherRules = currentRules.filter(r => {
+    const ranges = r.getRanges();
+    return !ranges.some(rng => rng.getA1Notation() === range.getA1Notation());
+  });
+
+  // Regras com alta prioridade (no topo da lista)
+  const ruleProg = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Programado")
+    .setBackground('#FBFF00') // Amarelo Vivo (mais intenso que o anterior)
+    .setRanges([range])
+    .build();
+
+  const formulaDisp = '=REGEXMATCH($' + colLetter + startRow + ',"(?i)^DISPON[IÍ]VEL")';
+  const formulaIndisp = '=REGEXMATCH($' + colLetter + startRow + ',"(?i)^INDISPON[IÍ]VEL")';
+  
+  const ruleDisp = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied(formulaDisp)
+    .setBackground('#c6efce') // Verde
+    .setRanges([range])
+    .build();
+    
+  const ruleIndisp = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied(formulaIndisp)
+    .setBackground('#ffc7ce') // Vermelho
+    .setRanges([range])
+    .build();
+    
+  // Prepend as novas regras para garantir prioridade máxima
+  sheet.setConditionalFormatRules([ruleProg, ruleDisp, ruleIndisp].concat(otherRules));
 }
 
 function buildDisponibilidadeContatoIndexForAttemics_() {
@@ -7342,37 +8420,32 @@ function syncProgramacaoPlacaMotoristaParaMensagemBaseAttemics_(options) {
 }
 
 function sendAttemicsTextMessage_(payload, options) {
-  const opts = options || {};
-  const cfg = getAttemicsConfig_();
-  const url = cfg.BASE_URL_SEND_TEXT;
-  const body = {
-    contactId: null,
-    number: String(payload.number || ''),
-    message: sanitizeMessageTextForAttemics_(payload.message || ''),
-    isWhisper: false,
-    forceSend: true,
-    verifyContact: true,
-    delayInSeconds: 0,
-    linkPreview: true,
-  };
-  if (!body.number) throw new Error('Número de telefone vazio');
-  if (!body.message) throw new Error('Mensagem vazia');
+  // =============================================
+  // WHATSAPP VIA CHATBOT (substitui Attemics API)
+  // =============================================
+  var number = String(payload.number || '');
+  var message = sanitizeMessageTextForAttemics_(payload.message || '');
+  if (!number) throw new Error('Número de telefone vazio');
+  if (!message) throw new Error('Mensagem vazia');
 
-  const response = UrlFetchApp.fetch(url, {
-    method: 'post',
-    muteHttpExceptions: true,
-    contentType: 'application/json-patch+json',
-    headers: { 'access-token': cfg.ACCESS_TOKEN || '' },
-    payload: JSON.stringify(body),
-  });
-  const code = response.getResponseCode();
-  const text = response.getContentText();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = getOrCreateFilaWhatsAppSheet_(ss);
+
+  sheet.appendRow([
+    formatDateTimeBR_(new Date()),
+    number,
+    message,
+    'PENDENTE',
+    '',
+    ''
+  ]);
+
   return {
-    ok: code >= 200 && code < 300,
-    httpStatus: code,
-    httpStatusText: '',
-    responseText: text,
-    requestBody: body,
+    ok: true,
+    httpStatus: 200,
+    httpStatusText: 'Queued for WhatsApp',
+    responseText: '{"queued":true}',
+    requestBody: { number: number, message: message },
   };
 }
 
@@ -7627,7 +8700,7 @@ function confirmAttemicsEnvioYesNo_(kind, opts) {
 function showAttemicsResumoExecucaoAlert_(kind, previewOnly, testMode, stats) {
   const ui = SpreadsheetApp.getUi();
   const linhas = [
-    (previewOnly ? '🔎 Prévia ' : '✅ Envio ') + (kind === 'primeira' ? '1a mensagem' : '2a mensagem') + (testMode ? ' (TESTE)' : ' (REAL)'),
+    (previewOnly ? '?? Prévia ' : '? Envio ') + (kind === 'primeira' ? '1a mensagem' : '2a mensagem') + (testMode ? ' (TESTE)' : ' (REAL)'),
     '',
     '• Total lidos: ' + (stats.totalLidos || 0),
     '• Elegíveis: ' + (stats.elegiveis || 0),
@@ -7671,7 +8744,7 @@ function runAttemicsMensagemFlow_(kind, options) {
 
   appendAttemicsExecLog_(logSheet, kind, 'EXEC_START', execId, {
     Modo: modeLabel,
-    Observacao: previewOnly ? 'Pr�via' : 'Envio',
+    Observacao: previewOnly ? 'Pr?via' : 'Envio',
   });
 
   const stats = {
@@ -7837,7 +8910,7 @@ function runAttemicsMensagemFlow_(kind, options) {
           DataSaida: row.dataSaida || '', Status: !hasTelefoneUsavel ? 'IGNORADO_SEM_TELEFONE' : 'ERRO_TEMPLATE', HTTPStatus: '', HTTPStatusText: '',
           ResponseBodyResumo: '', MessagePreview: truncateText_(mensagem, 420), PayloadResumo: '', HashDedupe: dedupeHash,
           Observacao: !hasTelefoneUsavel
-            ? (testMode ? 'N�mero de teste ausente/inv�lido' : 'Contato n�o localizado na disponibilidade')
+            ? (testMode ? 'N?mero de teste ausente/inv?lido' : 'Contato n?o localizado na disponibilidade')
             : 'Placa obrigat\u00f3ria para envio Attemics',
           RowProgramacao: row.rowProgramacao || '', ExecId: execId,
         });
@@ -7904,7 +8977,7 @@ function runAttemicsMensagemFlow_(kind, options) {
           Regiao: row.regiao || '', Cidade: row.cidade || '', Bairros: row.bairros || '', AgendaCarregamento: row.agendaCarregamento || '',
           DataSaida: row.dataSaida || '', Status: 'IGNORADO_SEM_TELEFONE', HTTPStatus: '', HTTPStatusText: '',
           ResponseBodyResumo: '', MessagePreview: truncateText_(mensagem, 420), PayloadResumo: '', HashDedupe: dedupeHash,
-          Observacao: testMode ? 'N�mero de teste ausente/inv�lido' : 'Contato n�o localizado na disponibilidade',
+          Observacao: testMode ? 'N?mero de teste ausente/inv?lido' : 'Contato n?o localizado na disponibilidade',
           RowProgramacao: row.rowProgramacao || '', ExecId: execId,
         });
         pushSampleAttemics_(stats.sampleBloqueados, row.plano + ' (sem telefone)', 8);
@@ -8093,16 +9166,12 @@ function runAttemicsMensagemFlow_(kind, options) {
   }
 }
 
-const CFG = {
-  SHEET_PROGRAMACAO: 'PROGRAMACAO',
-  SHEET_DISPONIBILIDADE: 'DISPONIBILIDADE',
-  PROGRAMACAO_HEADER_ROW: 3,
-  DISPONIBILIDADE_HEADER_ROW: 1,
-  MSG_HEADER_ROW: 1,
-  PROGRAMACAO_HEADERS: { placa: 'Placa', motorista: 'Motorista', greenMileStatus: 'GREEN MILE', attemicsStatus: 'ATTEMICS', clickupStatus: 'CLICKUP STATUS', clickup: 'CLICKUP', notaFiscal: 'Nota fiscal' },
-  DISP_HEADERS: { placa: 'PLACA', motorista: 'MOTORISTA' },
-  TOAST_TITLE: 'Programacao',
-};
+
+/** 
+ * Alias global para compatibilidade. 
+ * Centralizado em CONFIG no topo do arquivo.
+ */
+var CFG = CONFIG;
 function getProgramacaoHeaderRow_() { return CFG.PROGRAMACAO_HEADER_ROW || 3; }
 function getDisponibilidadeHeaderRow_() { return CFG.DISPONIBILIDADE_HEADER_ROW || 1; }
 function setupProgramacaoColumns() {
@@ -8215,15 +9284,33 @@ function onEdit(e) {
   if (!e || !e.range) return;
   try {
     const range = e.range, sheet = range.getSheet();
-    if (normalizeHeader_(sheet.getName()) !== normalizeHeader_(CFG.SHEET_PROGRAMACAO)) return;
-    const cols = findRequiredColumns_();
-    if (range.getNumColumns() !== 1) return;
+    if (normalizeHeader_(sheet.getName()) === normalizeHeader_(getJornadaSheetName_())) {
+      handleJornadaOnEdit_(e);
+      return;
+    }
+    const sheetNameNorm = normalizeHeader_(sheet.getName());
+    const isProgSheet = sheetNameNorm === normalizeHeader_(CFG.SHEET_PROGRAMACAO) || 
+                       sheetNameNorm.indexOf('PROGRAMACAO') !== -1 ||
+                       sheetNameNorm.indexOf('PROGRAMAÇÃO') !== -1;
 
-    const editedCol = range.getColumn();
-    const isPlacaCol = editedCol === cols.programacao.placaCol;
-    const isMotoristaCol = editedCol === cols.programacao.motoristaCol;
-    const isFaixaCol = !!cols.programacao.faixaAgendaCol && editedCol === cols.programacao.faixaAgendaCol;
-    if (!isPlacaCol && !isMotoristaCol && !isFaixaCol) return;
+    if (!isProgSheet) return;
+    
+    // Diagnóstico inicial para o usuário
+    toast_(SpreadsheetApp.getActive(), "🔍 Processando sincronização automática...");
+
+    const cols = findRequiredColumns_();
+    if (cols.disponibilidade.sheet) {
+       toast_(SpreadsheetApp.getActive(), "✅ Aba de Disponibilidade detectada: " + cols.disponibilidade.sheet.getName());
+    }
+
+    const startCol = range.getColumn();
+    const endCol = startCol + range.getNumColumns() - 1;
+    const isPlacaCol = cols.programacao.placaCol >= startCol && cols.programacao.placaCol <= endCol;
+    const isMotoristaCol = cols.programacao.motoristaCol >= startCol && cols.programacao.motoristaCol <= endCol;
+    const isFaixaCol = !!cols.programacao.faixaAgendaCol && cols.programacao.faixaAgendaCol >= startCol && cols.programacao.faixaAgendaCol <= endCol;
+    const isDataSaidaCol = !!cols.programacao.dataSaidaCol && cols.programacao.dataSaidaCol >= startCol && cols.programacao.dataSaidaCol <= endCol;
+    const isPlanoCol = !!cols.programacao.planosCol && cols.programacao.planosCol >= startCol && cols.programacao.planosCol <= endCol;
+    if (!isPlacaCol && !isMotoristaCol && !isFaixaCol && !isDataSaidaCol && !isPlanoCol) return;
 
     const startRow = Math.max(range.getRow(), cols.programacao.headerRow + 1);
     const endRow = range.getRow() + range.getNumRows() - 1;
@@ -8234,11 +9321,38 @@ function onEdit(e) {
       if (isFaixaCol) {
         try { preencherDataCarregamentoPorFaixaAgenda_(sheet, r, cols); } catch (e2) {}
       }
-      if ((isFaixaCol || isPlacaCol) && getClickUpProgramacaoConfig_().ENABLE_ONEDIT_JANELA_SYNC) {
-        try { syncClickUpProgramacaoOnEditRow_(sheet, r, cols, { syncPlaca: isPlacaCol, syncJanela: isFaixaCol || isPlacaCol }); } catch (e2) {}
+      if (isDataSaidaCol) {
+        try { syncJornadaInternaFromProgramacaoRow_(sheet, r, cols); } catch (e2) {}
+      }
+      if (isPlacaCol || isPlanoCol || isDataSaidaCol) {
+        try { syncDisponibilidadeProgramadoFromProgramacaoRow_(sheet, r, cols, e); } catch (e2) {}
+      }
+      if (isFaixaCol || isPlacaCol) {
+        if (getClickUpProgramacaoConfig_().ENABLE_ONEDIT_JANELA_SYNC) {
+          try { syncClickUpProgramacaoOnEditRow_(sheet, r, cols, { syncPlaca: isPlacaCol, syncJanela: isFaixaCol || isPlacaCol }); } catch (e2) {}
+        }
       }
     }
   } catch (err) { toast_(SpreadsheetApp.getActive(), 'Erro no onEdit: ' + (err && err.message ? err.message : err)); }
+
+  // --- TRATAMENTO DE XML_IMPORTADOS (Sincronização Externa Manual) ---
+  try {
+    const xmlSheetName = (CONFIG.XML_RECEBIMENTO && CONFIG.XML_RECEBIMENTO.SHEET_XML) || 'XML_IMPORTADOS';
+    if (sheet.getName() === xmlSheetName) {
+      const startR = e.range.getRow();
+      const numR = e.range.getNumRows();
+      // Apenas se não for a linha de cabeçalho
+      if (startR > 1) {
+        const rowsToSync = sheet.getRange(startR, 1, numR, sheet.getLastColumn()).getValues();
+        const cfg = CONFIG.XML_RECEBIMENTO || {};
+        if (cfg.GRU_BASE_PESO_ENABLED) {
+          syncXmlImportRowsToGruBasePeso_(rowsToSync, cfg);
+        }
+      }
+    }
+  } catch (eXml) {
+    console.error('Erro na sincronização onEdit XML: ' + eXml);
+  }
 }
 
 function preencherDataCarregamentoPorFaixaAgenda_(sheet, row, cachedCols) {
@@ -8279,8 +9393,9 @@ function parseFaixaAgendaStartMinutes_(faixaText) {
 
 function preencherMotoristaPorPlaca_(sheet, row, cachedCols) {
   const cols = cachedCols || findRequiredColumns_();
-  const placaCell = sheet.getRange(row, cols.programacao.placaCol);
-  const motoristaCell = sheet.getRange(row, cols.programacao.motoristaCol);
+  const pcols = cols.programacao || {};
+  const placaCell = sheet.getRange(row, pcols.placaCol);
+  const motoristaCell = sheet.getRange(row, pcols.motoristaCol);
   const placaRaw = String(placaCell.getDisplayValue() || '').trim();
   const placaKey = normalizePlate_(placaRaw);
   if (!placaKey) {
@@ -8290,32 +9405,75 @@ function preencherMotoristaPorPlaca_(sheet, row, cachedCols) {
     return;
   }
   if (placaRaw !== placaKey) placaCell.setValue(placaKey);
-  if (isDuplicatePlacaInProgramacao_(sheet, row, cols.programacao.placaCol, placaKey)) {
+  if (isDuplicatePlacaInProgramacao_(sheet, row, pcols.placaCol, placaKey)) {
     rejectPlacaInput_(sheet, row, cols.programacao, placaCell, motoristaCell, 'Placa duplicada na Programacao: ' + placaRaw);
     return;
   }
-  const idx = buildDisponibilidadeIndexCached_(cols.disponibilidade.sheet, cols.disponibilidade.headerRow);
+
+  // Obter a data de referência da linha. Prioriza Data de CARREGAMENTO, pois o vínculo 
+  // com a Disponibilidade geralmente ocorre no dia do carregamento.
+  let dateRef = toDateOnly_(new Date());
+  let dRefLoaded = false;
+  
+  if (pcols.dataCarregamentoCol) {
+    const dVal = sheet.getRange(row, pcols.dataCarregamentoCol).getValue();
+    const dTxt = sheet.getRange(row, pcols.dataCarregamentoCol).getDisplayValue();
+    const dRef = toDateOnly_(dVal) || parseDateBR_(dTxt) || toDateOnly_(dTxt);
+    if (dRef) {
+      dateRef = dRef;
+      dRefLoaded = true;
+    }
+  }
+
+  if (!dRefLoaded && pcols.dataSaidaCol) {
+    const dVal = sheet.getRange(row, pcols.dataSaidaCol).getValue();
+    const dTxt = sheet.getRange(row, pcols.dataSaidaCol).getDisplayValue();
+    const dRef = toDateOnly_(dVal) || parseDateBR_(dTxt) || toDateOnly_(dTxt);
+    if (dRef) dateRef = dRef;
+  }
+
+  // Tenta encontrar a placa no índice da data correspondente
+  let idx = buildDisponibilidadeIndexCached_(cols.disponibilidade.sheet, cols.disponibilidade.headerRow, dateRef);
+  let motorista = idx.byPlate.get(placaKey);
+  let resolvedDate = dateRef;
+
+  // FALLBACK: Se não encontrou na data programada e a data é futura, tenta HOJE
+  const today = toDateOnly_(new Date());
+  if (!motorista && !isSameDay_(dateRef, today) && dateRef > today) {
+    const todayIndex = buildDisponibilidadeIndexCached_(cols.disponibilidade.sheet, cols.disponibilidade.headerRow, today);
+    const mToday = todayIndex.byPlate.get(placaKey);
+    if (mToday) {
+      idx = todayIndex;
+      motorista = mToday;
+      resolvedDate = today;
+    }
+  }
+
   if (idx.duplicatesToday.has(placaKey)) {
-    rejectPlacaInput_(sheet, row, cols.programacao, placaCell, motoristaCell, 'Placa duplicada na disponibilidade na data de hoje: ' + placaRaw);
+    rejectPlacaInput_(sheet, row, cols.programacao, placaCell, motoristaCell, 'Placa duplicada na disponibilidade em ' + Utilities.formatDate(resolvedDate, Session.getScriptTimeZone(), 'dd/MM/yyyy') + ': ' + placaRaw);
     return;
   }
-  if (idx.unavailableToday.has(placaKey)) {
-    rejectPlacaInput_(sheet, row, cols.programacao, placaCell, motoristaCell, 'Placa indispon\u00edvel hoje na aba ' + CFG.SHEET_DISPONIBILIDADE + ': ' + placaRaw);
+  if (!motorista && idx.unavailableToday.has(placaKey)) {
+    rejectPlacaInput_(sheet, row, cols.programacao, placaCell, motoristaCell, 'Placa indisponível em ' + Utilities.formatDate(resolvedDate, Session.getScriptTimeZone(), 'dd/MM/yyyy') + ': ' + placaRaw);
     return;
   }
-  if (!idx.byPlate.has(placaKey)) {
-    rejectPlacaInput_(sheet, row, cols.programacao, placaCell, motoristaCell, 'Placa nao encontrada/disponivel hoje na aba ' + CFG.SHEET_DISPONIBILIDADE + ': ' + placaRaw);
+  if (!motorista) {
+    rejectPlacaInput_(sheet, row, cols.programacao, placaCell, motoristaCell, 'Placa não encontrada/disponível em ' + Utilities.formatDate(dateRef, Session.getScriptTimeZone(), 'dd/MM/yyyy') + ': ' + placaRaw);
     return;
   }
-  motoristaCell.setValue(idx.byPlate.get(placaKey) || '');
+  motoristaCell.setValue(motorista || '');
   placaCell.clearNote();
   clearProgramacaoRowError_(sheet, row, cols.programacao.notaFiscalCol);
 }
 function findRequiredColumns_() {
   const ss = SpreadsheetApp.getActive();
-  const prog = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO), disp = findSheetCaseInsensitive_(ss, CFG.SHEET_DISPONIBILIDADE);
-  if (!prog) throw new Error('Aba n\u00e3o encontrada: ' + CFG.SHEET_PROGRAMACAO);
-  if (!disp) throw new Error('Aba n\u00e3o encontrada: ' + CFG.SHEET_DISPONIBILIDADE);
+  const prog = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
+  // Tenta encontrar a aba Disponibilidade por múltiplos nomes (inclusive 'THX')
+  let disp = findSheetCaseInsensitive_(ss, CFG.SHEET_DISPONIBILIDADE);
+  if (!disp) disp = findSheetCaseInsensitive_(ss, 'THX');
+  if (!disp) disp = findSheetCaseInsensitive_(ss, 'DISPONIBILIDADE THX');
+  if (!prog) throw new Error('Aba não encontrada: ' + CFG.SHEET_PROGRAMACAO);
+  if (!disp) throw new Error('Aba Disponibilidade não encontrada. Tentados: DISPONIBILIDADE, THX');
   const progHeaderRow = getProgramacaoHeaderRow_();
   const dispHeaderRow = getDisponibilidadeHeaderRow_();
   const progHeaders = mapHeaders_(prog, progHeaderRow), dispHeaders = mapHeaders_(disp, dispHeaderRow);
@@ -8327,16 +9485,17 @@ function findRequiredColumns_() {
   const clickupCol = progHeaders.get(normHeader_(CFG.PROGRAMACAO_HEADERS.clickup));
   const faixaAgendaCol = getHeaderColOptional_(progHeaders, ['FAIXA DE AGENDA']);
   const dataCarregamentoCol = getHeaderColOptional_(progHeaders, ['DATA DE CARREGAMENTO']);
+  const dataSaidaCol = getHeaderColOptional_(progHeaders, ['DATA DE SAIDA', 'DATA DE SAÍDA']);
   const planosCol = getHeaderColOptional_(progHeaders, ['PLANOS']);
   const notaFiscalCol = progHeaders.get(normHeader_(CFG.PROGRAMACAO_HEADERS.notaFiscal));
   const dispPlacaCol = dispHeaders.get(normHeader_(CFG.DISP_HEADERS.placa));
   const dispMotoristaCol = dispHeaders.get(normHeader_(CFG.DISP_HEADERS.motorista));
-  if (!placaCol || !motoristaCol) throw new Error('Cabe\u00e7alhos Placa/Motorista n\u00e3o encontrados na aba ' + CFG.SHEET_PROGRAMACAO + '. Execute setupProgramacaoColumns().');
-  if (!notaFiscalCol) throw new Error('Cabe\u00e7alho Nota fiscal n\u00e3o encontrado na aba ' + CFG.SHEET_PROGRAMACAO + '.');
-  if (!dispPlacaCol || !dispMotoristaCol) throw new Error('Cabe\u00e7alhos PLACA/MOTORISTA n\u00e3o encontrados na aba ' + CFG.SHEET_DISPONIBILIDADE + '.');
-  return { programacao: { sheet: prog, headerRow: progHeaderRow, planosCol, faixaAgendaCol, dataCarregamentoCol, placaCol, motoristaCol, greenMileStatusCol, attemicsStatusCol, clickupStatusCol, clickupCol, notaFiscalCol }, disponibilidade: { sheet: disp, headerRow: dispHeaderRow, placaCol: dispPlacaCol, motoristaCol: dispMotoristaCol } };
+  if (!placaCol || !motoristaCol) throw new Error('Cabeçalhos Placa/Motorista não encontrados na aba ' + CFG.SHEET_PROGRAMACAO + '. Execute setupProgramacaoColumns().');
+  if (!notaFiscalCol) throw new Error('Cabeçalho Nota fiscal não encontrado na aba ' + CFG.SHEET_PROGRAMACAO + '.');
+  if (!dispPlacaCol || !dispMotoristaCol) throw new Error('Cabeçalhos PLACA/MOTORISTA não encontrados na aba Disponibilidade.');
+  return { programacao: { sheet: prog, headerRow: progHeaderRow, planosCol, faixaAgendaCol, dataCarregamentoCol, dataSaidaCol, placaCol, motoristaCol, greenMileStatusCol, attemicsStatusCol, clickupStatusCol, clickupCol, notaFiscalCol }, disponibilidade: { sheet: disp, headerRow: dispHeaderRow, placaCol: dispPlacaCol, motoristaCol: dispMotoristaCol } };
 }
-function buildDisponibilidadeIndex_(sheet, headerRow) {
+function buildDisponibilidadeIndex_(sheet, headerRow, refDate) {
   const result = {
     byPlate: new Map(),
     duplicatesToday: new Set(),
@@ -8354,12 +9513,13 @@ function buildDisponibilidadeIndex_(sheet, headerRow) {
     if (h === normalizeHeader_('DATA')) dIdx = i;
     if (h === normalizeHeader_('DISPONIBILIDADE')) sIdx = i;
   }
-  if (pIdx === -1 || mIdx === -1) throw new Error('Cabe\u00e7alhos PLACA/MOTORISTA n\u00e3o encontrados na aba ' + CFG.SHEET_DISPONIBILIDADE + '.');
-  const today = toDateOnly_(new Date());
+  if (pIdx === -1 || mIdx === -1) throw new Error('Cabeçalhos PLACA/MOTORISTA não encontrados na aba Disponibilidade.');
+  // Usa refDate se fornecida, caso contrário usa hoje
+  const targetDate = (refDate && !isNaN(refDate)) ? refDate : toDateOnly_(new Date());
   for (let r = 1; r < data.length; r++) {
     if (dIdx !== -1) {
-      const rowDate = toDateOnly_(data[r][dIdx]);
-      if (!rowDate || !isSameDay_(rowDate, today)) continue;
+      const rowDate = parseDisponibilidadeDateForIndex_(data[r][dIdx]);
+      if (!rowDate || !isSameDay_(rowDate, targetDate)) continue;
     }
 
     const key = normalizePlate_(data[r][pIdx]);
@@ -8368,27 +9528,32 @@ function buildDisponibilidadeIndex_(sheet, headerRow) {
     const status = sIdx !== -1 ? normalizeHeader_(data[r][sIdx]) : '';
     const isIndisponivel = status === normalizeHeader_('INDISPONIVEL') || status === normalizeHeader_('INDISPONÍVEL');
 
-    if (result.duplicatesToday.has(key)) continue;
-    if (result.byPlate.has(key) || result.unavailableToday.has(key)) {
-      result.byPlate.delete(key);
-      result.unavailableToday.delete(key);
-      result.duplicatesToday.add(key);
-      continue;
-    }
-
     if (isIndisponivel) {
-      result.unavailableToday.add(key);
+      if (!result.byPlate.has(key) && !result.unavailableToday.has(key)) result.unavailableToday.add(key);
       continue;
     }
 
-    result.byPlate.set(key, motorista);
+    if (!result.byPlate.has(key)) {
+      result.byPlate.set(key, motorista);
+      result.unavailableToday.delete(key);
+    }
   }
   return result;
 }
-function buildDisponibilidadeIndexCached_(sheet, headerRow) {
+
+function parseDisponibilidadeDateForIndex_(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value)) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  const text = String(value == null ? '' : value).trim();
+  if (!text) return null;
+  if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) return null;
+  return parseDateBR_(text);
+}
+function buildDisponibilidadeIndexCached_(sheet, headerRow, refDate) {
   const cache = CacheService.getScriptCache();
-  const today = new Date();
-  const dayKey = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate();
+  const targetDate = (refDate && !isNaN(refDate)) ? refDate : new Date();
+  const dayKey = targetDate.getFullYear() + '-' + (targetDate.getMonth() + 1) + '-' + targetDate.getDate();
   const cacheKey = [
     'dispIndex',
     normalizeHeader_(sheet.getName()),
@@ -8412,7 +9577,7 @@ function buildDisponibilidadeIndexCached_(sheet, headerRow) {
     // fallback para rebuild
   }
 
-  const built = buildDisponibilidadeIndex_(sheet, headerRow);
+  const built = buildDisponibilidadeIndex_(sheet, headerRow, refDate);
   try {
     cache.put(cacheKey, JSON.stringify({
       byPlate: Array.from(built.byPlate.entries()),
@@ -8454,3 +9619,700 @@ function normalizePlate_(value) { return String(value || '').toUpperCase().trim(
 function normHeader_(value) { return String(value || '').trim().toLowerCase(); }
 function toast_(ss, message) { try { ss.toast(message, CFG.TOAST_TITLE, 5); } catch (err) {} }
 
+function getJornadaSheetName_() { return 'Jornada Interna Mot.'; }
+function getJornadaHeaders_() {
+  return [
+    'Data',
+    'Plano de Viagem',
+    'Perfil do Ve\u00edculo',
+    'Placa',
+    'Motorista',
+    'Quantidade de entregas',
+    'Chegada no CD',
+    'Hora Chegada',
+    'Sa\u00edda do CD',
+    'Hora Sa\u00edda',
+    'Jornada interna',
+    'Classifica\u00e7\u00e3o Jornada'
+  ];
+}
+
+function setupJornadaInterna() { ensureJornadaInternaSheet_(); }
+
+function ensureJornadaInternaSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(getJornadaSheetName_()) || findSheetCaseInsensitive_(ss, getJornadaSheetName_());
+  if (!sh) sh = ss.insertSheet(getJornadaSheetName_());
+  const headers = getJornadaHeaders_();
+  ensureHeaders_(sh, headers, 1);
+  sh.setFrozenRows(1);
+  const hmap = mapHeaders_(sh, 1);
+  const cData = getHeaderColRequired_(hmap, ['DATA'], 'Jornada');
+  const cChkIn = getHeaderColRequired_(hmap, ['CHEGADA NO CD'], 'Jornada');
+  const cHoraIn = getHeaderColRequired_(hmap, ['HORA CHEGADA'], 'Jornada');
+  const cChkOut = getHeaderColRequired_(hmap, ['SAIDA DO CD', 'SA\u00cdDA DO CD'], 'Jornada');
+  const cHoraOut = getHeaderColRequired_(hmap, ['HORA SAIDA', 'HORA SA\u00cdDA'], 'Jornada');
+  const cDur = getHeaderColRequired_(hmap, ['JORNADA INTERNA'], 'Jornada');
+  const maxRows = sh.getMaxRows();
+  const dv = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  sh.getRange(2, cChkIn, Math.max(maxRows - 1, 1), 1).setDataValidation(dv);
+  sh.getRange(2, cChkOut, Math.max(maxRows - 1, 1), 1).setDataValidation(dv);
+  sh.getRange(2, cData, Math.max(maxRows - 1, 1), 1).setNumberFormat('dd/mm/yyyy');
+  sh.getRange(2, cHoraIn, Math.max(maxRows - 1, 1), 1).setNumberFormat('hh:mm:ss');
+  sh.getRange(2, cHoraOut, Math.max(maxRows - 1, 1), 1).setNumberFormat('hh:mm:ss');
+  sh.getRange(2, cDur, Math.max(maxRows - 1, 1), 1).setNumberFormat('[h]:mm');
+  return sh;
+}
+
+function syncJornadaInternaToday() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const src = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
+  if (!src) throw new Error('Aba Programacao nao encontrada.');
+  const tgt = ensureJornadaInternaSheet_();
+  const msgBase = findSheetCaseInsensitive_(ss, CONFIG.MESSAGE_SHEET_NAME || 'Programacao_Mensagem_Base');
+  const headerRow = getProgramacaoHeaderRow_();
+  const hmap = mapHeaders_(src, headerRow);
+  const cPlanos = getHeaderColRequired_(hmap, ['PLANOS'], 'Programacao');
+  const cPerfil = getHeaderColRequired_(hmap, ['PERFIL'], 'Programacao');
+  const cPlaca = getHeaderColRequired_(hmap, ['PLACA'], 'Programacao');
+  const cMotorista = getHeaderColRequired_(hmap, ['MOTORISTA'], 'Programacao');
+  const cDataSaida = getHeaderColOptional_(hmap, ['DATA DE SAIDA', 'DATA DE SA\u00cdDA']);
+  const cDataCarreg = getHeaderColOptional_(hmap, ['DATA DE CARREGAMENTO']);
+  const lastRowSrc = src.getLastRow();
+  const lastColSrc = src.getLastColumn();
+  const rows = getSheetDataRowsDisplay_(src, lastColSrc, headerRow);
+  const rowsRaw = lastRowSrc > headerRow ? src.getRange(headerRow + 1, 1, lastRowSrc - headerRow, lastColSrc).getValues() : [];
+  const hmapTgt = mapHeaders_(tgt, 1);
+  const cDataTgt = getHeaderColRequired_(hmapTgt, ['DATA'], 'Jornada');
+  const cPlanoTgt = getHeaderColRequired_(hmapTgt, ['PLANO DE VIAGEM'], 'Jornada');
+  const cPlacaTgt = getHeaderColRequired_(hmapTgt, ['PLACA'], 'Jornada');
+  const lastRowTgt = tgt.getLastRow();
+  const existingRows = lastRowTgt > 1 ? tgt.getRange(2, 1, lastRowTgt - 1, tgt.getLastColumn()).getDisplayValues() : [];
+  const existingPlanoPlaca = {};
+  for (let i = 0; i < existingRows.length; i++) {
+    const row = existingRows[i] || [];
+    const plano = String(row[cPlanoTgt - 1] == null ? '' : row[cPlanoTgt - 1]).trim();
+    const placa = String(row[cPlacaTgt - 1] == null ? '' : row[cPlacaTgt - 1]).trim().toUpperCase();
+    if (!plano || !placa) continue;
+    existingPlanoPlaca[plano + '|' + placa] = true;
+  }
+  const quantidadeByPlano = {};
+  if (msgBase) {
+    const msgHeaderMap = mapHeaders_(msgBase, 1);
+    const cMsgPlanos = getHeaderColRequired_(msgHeaderMap, ['PLANOS'], 'Programacao_Mensagem_Base');
+    const cMsgQtd = getHeaderColOptional_(msgHeaderMap, ['QUANTIDADE DE ENTREGAS', 'QTD ENTREGAS', 'ENTREGAS']);
+    if (cMsgQtd) {
+      const msgRows = getSheetDataRowsDisplay_(msgBase, msgBase.getLastColumn(), 1);
+      for (let i = 0; i < msgRows.length; i++) {
+        const m = msgRows[i] || [];
+        const plano = String(m[cMsgPlanos - 1] == null ? '' : m[cMsgPlanos - 1]).trim();
+        const key = normalizePlanoKeyForMatch_(plano);
+        if (!key || quantidadeByPlano[key] != null) continue;
+        quantidadeByPlano[key] = m[cMsgQtd - 1];
+      }
+    }
+  }
+  const today = toDateOnly_(new Date());
+  const out = [];
+  let withPlacaCount = 0;
+  let duplicateCount = 0;
+  let firstDuplicateKey = '';
+  let insertedStartRow = 0;
+  function alreadyExistsByPlanoPlaca_(plano, placa) {
+    const planoKey = String(plano == null ? '' : plano).trim();
+    const placaKey = String(placa == null ? '' : placa).trim().toUpperCase();
+    if (!planoKey || !placaKey) return false;
+    const key = planoKey + '|' + placaKey;
+    if (existingPlanoPlaca[key]) {
+      if (!firstDuplicateKey) firstDuplicateKey = key;
+      return true;
+    }
+
+    for (let j = 0; j < out.length; j++) {
+      const row = out[j] || [];
+      const p = String(row[1] == null ? '' : row[1]).trim();
+      const pl = String(row[3] == null ? '' : row[3]).trim().toUpperCase();
+      if (p === planoKey && pl === placaKey) return true;
+    }
+
+    return false;
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i] || [];
+    const rr = rowsRaw[i] || [];
+    const dtSaida = cDataSaida ? (toDateOnly_(rr[cDataSaida - 1]) || parseDateBR_(r[cDataSaida - 1]) || toDateOnly_(r[cDataSaida - 1])) : null;
+    const dtCarreg = cDataCarreg ? (toDateOnly_(rr[cDataCarreg - 1]) || parseDateBR_(r[cDataCarreg - 1]) || toDateOnly_(r[cDataCarreg - 1])) : null;
+    const dtRef = dtSaida || dtCarreg || today;
+    const planoDisplay = String(r[cPlanos - 1] == null ? '' : r[cPlanos - 1]).trim();
+    const perfilDisplay = String(cPerfil ? (r[cPerfil - 1] == null ? '' : r[cPerfil - 1]) : '').trim();
+    const placaDisplay = String(r[cPlaca - 1] == null ? '' : r[cPlaca - 1]).trim();
+    const motoristaDisplay = String(r[cMotorista - 1] == null ? '' : r[cMotorista - 1]).trim();
+    const plano = planoDisplay || String(rr[cPlanos - 1] == null ? '' : rr[cPlanos - 1]).trim();
+    const perfil = perfilDisplay || (cPerfil ? String(rr[cPerfil - 1] == null ? '' : rr[cPerfil - 1]).trim() : '');
+    const placa = (placaDisplay || String(rr[cPlaca - 1] == null ? '' : rr[cPlaca - 1]).trim()).toUpperCase();
+    const motorista = motoristaDisplay || String(rr[cMotorista - 1] == null ? '' : rr[cMotorista - 1]).trim();
+    if (!placa) continue;
+    withPlacaCount++;
+    const planoKey = normalizePlanoKeyForMatch_(plano);
+    const qtd = quantidadeByPlano[planoKey] != null ? quantidadeByPlano[planoKey] : '';
+    if (alreadyExistsByPlanoPlaca_(plano, placa)) {
+      duplicateCount++;
+      continue;
+    }
+    out.push([dtRef || new Date(), plano, perfil, placa, motorista, qtd, false, '', false, '', '', '']);
+  }
+  if (out.length) {
+    const startRow = findFirstEmptyRowInColumn_(tgt, 1, 2);
+    insertedStartRow = startRow;
+    tgt.getRange(startRow, 1, out.length, getJornadaHeaders_().length).setValues(out);
+    const cChkIn = getHeaderColRequired_(hmapTgt, ['CHEGADA NO CD'], 'Jornada');
+    const cHoraIn = getHeaderColRequired_(hmapTgt, ['HORA CHEGADA'], 'Jornada');
+    const cChkOut = getHeaderColRequired_(hmapTgt, ['SAIDA DO CD', 'SA\u00cdDA DO CD'], 'Jornada');
+    const cHoraOut = getHeaderColRequired_(hmapTgt, ['HORA SAIDA', 'HORA SA\u00cdDA'], 'Jornada');
+    const cDur = getHeaderColRequired_(hmapTgt, ['JORNADA INTERNA'], 'Jornada');
+    tgt.getRange(startRow, cDataTgt, out.length, 1).setNumberFormat('dd/mm/yyyy');
+    tgt.getRange(startRow, cHoraIn, out.length, 1).setNumberFormat('hh:mm:ss');
+    tgt.getRange(startRow, cHoraOut, out.length, 1).setNumberFormat('hh:mm:ss');
+    tgt.getRange(startRow, cDur, out.length, 1).setNumberFormat('[h]:mm');
+    const dv = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+    tgt.getRange(startRow, cChkIn, out.length, 1).setDataValidation(dv);
+    tgt.getRange(startRow, cChkOut, out.length, 1).setDataValidation(dv);
+  }
+  try { syncDisponibilidadeProgramadoFromProgramacao_(); } catch (e) {}
+  toast_(
+    ss,
+    'Jornada: inseridas=' + out.length + ' | com placa=' + withPlacaCount + ' | duplicadas=' + duplicateCount + (firstDuplicateKey ? ' | dup=' + firstDuplicateKey : '') + ' | aba=' + tgt.getName() + ' | linha inicial=' + (insertedStartRow || '-')
+  );
+  return { ok: true, inserted: out.length, scanned: rows.length, withPlaca: withPlacaCount, duplicated: duplicateCount, firstDuplicateKey: firstDuplicateKey };
+}
+
+function debugJornadaDuplicidade() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const src = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
+  if (!src) throw new Error('Aba Programacao nao encontrada.');
+  const tgt = ensureJornadaInternaSheet_();
+
+  const srcHeaderRow = getProgramacaoHeaderRow_();
+  const hSrc = mapHeaders_(src, srcHeaderRow);
+  const cSrcPlano = getHeaderColRequired_(hSrc, ['PLANOS'], 'Programacao');
+  const cSrcPlaca = getHeaderColRequired_(hSrc, ['PLACA'], 'Programacao');
+
+  const hTgt = mapHeaders_(tgt, 1);
+  const cTgtPlano = getHeaderColRequired_(hTgt, ['PLANO DE VIAGEM'], 'Jornada');
+  const cTgtPlaca = getHeaderColRequired_(hTgt, ['PLACA'], 'Jornada');
+
+  const srcLastRow = src.getLastRow();
+  const srcLastCol = src.getLastColumn();
+  const srcRows = srcLastRow > srcHeaderRow ? src.getRange(srcHeaderRow + 1, 1, srcLastRow - srcHeaderRow, srcLastCol).getDisplayValues() : [];
+
+  const tgtLastRow = tgt.getLastRow();
+  const tgtLastCol = tgt.getLastColumn();
+  const tgtRows = tgtLastRow > 1 ? tgt.getRange(2, 1, tgtLastRow - 1, tgtLastCol).getDisplayValues() : [];
+
+  const byKeyInTgt = {};
+  for (let i = 0; i < tgtRows.length; i++) {
+    const row = tgtRows[i] || [];
+    const plano = String(row[cTgtPlano - 1] == null ? '' : row[cTgtPlano - 1]).trim();
+    const placa = String(row[cTgtPlaca - 1] == null ? '' : row[cTgtPlaca - 1]).trim().toUpperCase();
+    if (!plano || !placa) continue;
+    const key = plano + '|' + placa;
+    if (!byKeyInTgt[key]) byKeyInTgt[key] = [];
+    byKeyInTgt[key].push(i + 2);
+  }
+
+  const duplicates = [];
+  const srcWithoutPlaca = [];
+  for (let i = 0; i < srcRows.length; i++) {
+    const row = srcRows[i] || [];
+    const plano = String(row[cSrcPlano - 1] == null ? '' : row[cSrcPlano - 1]).trim();
+    const placa = String(row[cSrcPlaca - 1] == null ? '' : row[cSrcPlaca - 1]).trim().toUpperCase();
+    const srcRow = srcHeaderRow + 1 + i;
+    if (!placa) {
+      srcWithoutPlaca.push(srcRow);
+      continue;
+    }
+    const key = plano + '|' + placa;
+    if (byKeyInTgt[key] && byKeyInTgt[key].length) {
+      duplicates.push({
+        key: key,
+        sourceRow: srcRow,
+        targetRows: byKeyInTgt[key].slice(0, 20),
+      });
+    }
+  }
+
+  const report = {
+    ok: true,
+    sourceSheet: src.getName(),
+    targetSheet: tgt.getName(),
+    sourceRowsScanned: srcRows.length,
+    targetRowsScanned: tgtRows.length,
+    sourceRowsWithoutPlaca: srcWithoutPlaca,
+    duplicatedCount: duplicates.length,
+    duplicatesSample: duplicates.slice(0, 30),
+  };
+
+  try {
+    console.log('=== DEBUG JORNADA DUPLICIDADE ===');
+    console.log('Source sheet: ' + report.sourceSheet);
+    console.log('Target sheet: ' + report.targetSheet);
+    console.log('Source rows scanned: ' + report.sourceRowsScanned);
+    console.log('Target rows scanned: ' + report.targetRowsScanned);
+    console.log('Source rows without placa: ' + JSON.stringify(report.sourceRowsWithoutPlaca));
+    console.log('Duplicated count: ' + report.duplicatedCount);
+    console.log('Duplicates sample: ' + JSON.stringify(report.duplicatesSample));
+  } catch (e) {}
+
+  return report;
+}
+
+function syncJornadaInternaFromProgramacaoRow_(sheet, row, cachedCols) {
+  const cols = cachedCols || findRequiredColumns_();
+  const pcols = cols.programacao || {};
+  if (!pcols.planosCol || !pcols.placaCol || !pcols.motoristaCol) return;
+  if (!pcols.dataSaidaCol && !pcols.dataCarregamentoCol) return;
+  const progHeaderMap = mapHeaders_(sheet, pcols.headerRow || getProgramacaoHeaderRow_());
+  const cPerfil = getHeaderColOptional_(progHeaderMap, ['PERFIL']);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tgt = ensureJornadaInternaSheet_();
+  const hmapTgt = mapHeaders_(tgt, 1);
+  const cDataTgt = getHeaderColRequired_(hmapTgt, ['DATA'], 'Jornada');
+  const cPlanoTgt = getHeaderColRequired_(hmapTgt, ['PLANO DE VIAGEM'], 'Jornada');
+  const cPlacaTgt = getHeaderColRequired_(hmapTgt, ['PLACA'], 'Jornada');
+  const dataSaidaDisplay = pcols.dataSaidaCol ? sheet.getRange(row, pcols.dataSaidaCol).getDisplayValue() : '';
+  const dataSaidaValue = pcols.dataSaidaCol ? sheet.getRange(row, pcols.dataSaidaCol).getValue() : '';
+  const dataCarregDisplay = pcols.dataCarregamentoCol ? sheet.getRange(row, pcols.dataCarregamentoCol).getDisplayValue() : '';
+  const dataCarregValue = pcols.dataCarregamentoCol ? sheet.getRange(row, pcols.dataCarregamentoCol).getValue() : '';
+  const dtSaida = parseDateBR_(dataSaidaDisplay) || toDateOnly_(dataSaidaValue);
+  const dtCarreg = parseDateBR_(dataCarregDisplay) || toDateOnly_(dataCarregValue);
+  const dtRef = dtSaida || dtCarreg;
+  if (!dtRef) return;
+  const plano = String(sheet.getRange(row, pcols.planosCol).getDisplayValue() || '').trim();
+  const perfil = cPerfil ? String(sheet.getRange(row, cPerfil).getDisplayValue() || '').trim() : '';
+  const placa = String(sheet.getRange(row, pcols.placaCol).getDisplayValue() || '').trim();
+  const motorista = String(sheet.getRange(row, pcols.motoristaCol).getDisplayValue() || '').trim();
+  if (!plano && !placa && !motorista) return;
+  const planoKey = normalizePlanoKeyForMatch_(plano);
+  const placaKey = normalizePlate_(placa);
+  const dtKey = Utilities.formatDate(dtRef, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const existingRows = getSheetDataRowsDisplay_(tgt, tgt.getLastColumn(), 1);
+  for (let i = 0; i < existingRows.length; i++) {
+    const rowT = existingRows[i] || [];
+    const dataVal = rowT[cDataTgt - 1];
+    const dataObj = toDateOnly_(dataVal);
+    if (!dataObj) continue;
+    const dataKey = Utilities.formatDate(dataObj, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const planoKeyT = normalizePlanoKeyForMatch_(rowT[cPlanoTgt - 1]);
+    const placaKeyT = normalizePlate_(rowT[cPlacaTgt - 1]);
+    if (dataKey === dtKey && planoKeyT === planoKey && placaKeyT === placaKey) return;
+  }
+  const qtd = getQuantidadeEntregasByPlano_(planoKey);
+  const newRow = [[dtRef, plano, perfil, placa, motorista, qtd, false, '', false, '', '', '']];
+  const startRow = tgt.getLastRow() + 1;
+  tgt.getRange(startRow, 1, 1, getJornadaHeaders_().length).setValues(newRow);
+  const cChkIn = getHeaderColRequired_(hmapTgt, ['CHEGADA NO CD'], 'Jornada');
+  const cHoraIn = getHeaderColRequired_(hmapTgt, ['HORA CHEGADA'], 'Jornada');
+  const cChkOut = getHeaderColRequired_(hmapTgt, ['SAIDA DO CD', 'SAÍDA DO CD'], 'Jornada');
+  const cHoraOut = getHeaderColRequired_(hmapTgt, ['HORA SAIDA', 'HORA SAÍDA'], 'Jornada');
+  const cDur = getHeaderColRequired_(hmapTgt, ['JORNADA INTERNA'], 'Jornada');
+  tgt.getRange(startRow, cDataTgt, 1, 1).setNumberFormat('dd/mm/yyyy');
+  tgt.getRange(startRow, cHoraIn, 1, 1).setNumberFormat('hh:mm:ss');
+  tgt.getRange(startRow, cHoraOut, 1, 1).setNumberFormat('hh:mm:ss');
+  tgt.getRange(startRow, cDur, 1, 1).setNumberFormat('[h]:mm');
+  const dv = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  tgt.getRange(startRow, cChkIn, 1, 1).setDataValidation(dv);
+  tgt.getRange(startRow, cChkOut, 1, 1).setDataValidation(dv);
+}
+
+function syncDisponibilidadeProgramadoFromProgramacaoRow_(sheet, row, cachedCols, e) {
+  const cols = cachedCols || findRequiredColumns_();
+  const pcols = cols.programacao || {};
+  if (!pcols.planosCol || !pcols.placaCol) return;
+  
+  const plano = String(sheet.getRange(row, pcols.planosCol).getDisplayValue() || '').trim();
+  const editPlaca = String(sheet.getRange(row, pcols.placaCol).getDisplayValue() || '').trim();
+  
+  // No caso de deleção da placa, pegamos o valor antigo se disponível
+  const oldPlacaValue = (e && e.oldValue && editPlaca === '') ? String(e.oldValue).trim() : '';
+  const placa = editPlaca || oldPlacaValue;
+  if (!placa) return;
+
+  const today = toDateOnly_(new Date());
+  let dtRef = null;
+  
+  // Determina a data de referência da linha na Programação
+  if (pcols.dataCarregamentoCol) {
+    const dVal = sheet.getRange(row, pcols.dataCarregamentoCol).getValue();
+    const dTxt = sheet.getRange(row, pcols.dataCarregamentoCol).getDisplayValue();
+    dtRef = toDateOnly_(dVal) || parseDateBR_(dTxt) || toDateOnly_(dTxt);
+  }
+  if (!dtRef && pcols.dataSaidaCol) {
+    const dVal = sheet.getRange(row, pcols.dataSaidaCol).getValue();
+    const dTxt = sheet.getRange(row, pcols.dataSaidaCol).getDisplayValue();
+    dtRef = toDateOnly_(dVal) || parseDateBR_(dTxt) || toDateOnly_(dTxt);
+  }
+  
+  // "Data Vigente": Se não achou data na linha, usa HOJE.
+  if (!dtRef) dtRef = today;
+
+  const dispSheet = cols.disponibilidade.sheet || findSheetCaseInsensitive_(SpreadsheetApp.getActiveSpreadsheet(), CONFIG.SHEET_DISPONIBILIDADE);
+  if (!dispSheet) return;
+
+  const headerRow = cols.disponibilidade.headerRow || getDisponibilidadeHeaderRow_();
+  const hmap = mapHeaders_(dispSheet, headerRow);
+  const cDispData = getHeaderColOptional_(hmap, ['DATA']);
+  const cDispPlaca = getHeaderColRequired_(hmap, ['PLACA'], 'Disponibilidade');
+  const cDispStatus = getHeaderColOptional_(hmap, ['DISPONIBILIDADE']);
+  let cDispPlano = getHeaderColOptional_(hmap, ['PLANO', 'PLANO DE VIAGEM', 'PLANO VIAGEM', 'SITUACAO', 'SITUAÇÃO']);
+  if (!cDispPlano) cDispPlano = 8; // Coluna H padrão
+  const cDispPlanoFixed = 8;
+  
+  const lastRow = dispSheet.getLastRow();
+  if (lastRow <= headerRow) return;
+
+  const lastCol = dispSheet.getLastColumn();
+  const range = dispSheet.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol);
+  const values = range.getValues();
+  const display = range.getDisplayValues();
+  
+  const placaKey = normalizePlate_(placa);
+  const planoFinal = editPlaca ? (plano || findPlanoByPlacaInProgramacao_(sheet, pcols, placaKey)) : '';
+  const shouldProgramar = !!planoFinal && !!editPlaca;
+  
+  let updated = false;
+  for (let i = 0; i < values.length; i++) {
+    const rowDisp = values[i] || [];
+    const rowDispTxt = display[i] || [];
+    const pDisp = normalizePlate_(rowDispTxt[cDispPlaca - 1] || rowDisp[cDispPlaca - 1]);
+    
+    if (!pDisp || pDisp !== placaKey) continue;
+    
+    // Validamos a data na Disponibilidade
+    const dtTxt = rowDispTxt[cDispData - 1];
+    const dtVal = rowDisp[cDispData - 1];
+    const dtDisp = toDateOnly_(dtVal) || parseDateBR_(dtTxt) || toDateOnly_(dtTxt);
+    
+    // Só sincroniza se for o DIA VIGENTE (dtRef) 
+    // ou se dtRef for futuro e estivermos olhando a linha de HOJE no Disponibilidade
+    let isMatch = isSameDay_(dtDisp, dtRef);
+    if (!isMatch && dtRef > today && isSameDay_(dtDisp, today)) {
+       isMatch = true;
+    }
+    
+    if (!isMatch) continue;
+
+    const currentStatus = cDispStatus ? String(rowDispTxt[cDispStatus - 1] || rowDisp[cDispStatus - 1] || '').trim() : '';
+    const normCurrentStatus = normalizeHeader_(currentStatus);
+
+    if (shouldProgramar) {
+      // Altera para Programado se NÃO estiver Indisponível
+      if (cDispStatus && normCurrentStatus !== normalizeHeader_('Indisponível')) {
+        dispSheet.getRange(headerRow + 1 + i, cDispStatus).setValue('Programado');
+      }
+      dispSheet.getRange(headerRow + 1 + i, cDispPlano).setValue(planoFinal);
+      if (cDispPlanoFixed !== cDispPlano) dispSheet.getRange(headerRow + 1 + i, cDispPlanoFixed).setValue(planoFinal);
+      updated = true;
+    } else {
+      // Reverte para Disponível apenas se estiver Programado ou Vazio
+      if (normCurrentStatus === normalizeHeader_('Programado') || !normCurrentStatus) {
+        if (cDispStatus) dispSheet.getRange(headerRow + 1 + i, cDispStatus).setValue('Disponível');
+        dispSheet.getRange(headerRow + 1 + i, cDispPlano).setValue('');
+        if (cDispPlanoFixed !== cDispPlano) dispSheet.getRange(headerRow + 1 + i, cDispPlanoFixed).setValue('');
+        updated = true;
+      }
+    }
+  }
+
+  // Backup: Se não achou a placa com a data certa, tenta achar a placa em qualquer linha (mais abrangente)
+  if (!updated && shouldProgramar) {
+    for (let i = 0; i < values.length; i++) {
+      const rowDispTxt = display[i] || [];
+      const pDisp = normalizePlate_(rowDispTxt[cDispPlaca - 1]);
+      if (pDisp === placaKey) {
+        if (cDispStatus) dispSheet.getRange(headerRow + 1 + i, cDispStatus).setValue('Programado');
+        dispSheet.getRange(headerRow + 1 + i, cDispPlano).setValue(planoFinal);
+        updated = true;
+        break;
+      }
+    }
+  }
+}
+
+function findPlanoByPlacaInProgramacao_(sheet, pcols, placaKey) {
+  if (!placaKey) return '';
+  const headerRow = pcols.headerRow || getProgramacaoHeaderRow_();
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow <= headerRow) return '';
+  const rows = sheet.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getDisplayValues();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i] || [];
+    const placa = normalizePlate_(r[pcols.placaCol - 1]);
+    if (!placa || placa !== placaKey) continue;
+    const plano = String(r[pcols.planosCol - 1] == null ? '' : r[pcols.planosCol - 1]).trim();
+    if (plano) return plano;
+  }
+  return '';
+}
+
+function syncDisponibilidadeProgramadoFromProgramacao_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const shProg = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
+  const shDisp = findSheetCaseInsensitive_(ss, CFG.SHEET_DISPONIBILIDADE);
+  if (!shProg || !shDisp) return;
+  const progHeaderRow = getProgramacaoHeaderRow_();
+  const progMap = mapHeaders_(shProg, progHeaderRow);
+  const cProgPlanos = getHeaderColRequired_(progMap, ['PLANOS'], 'Programacao');
+  const cProgPlaca = getHeaderColRequired_(progMap, ['PLACA'], 'Programacao');
+  const cProgDataSaida = getHeaderColOptional_(progMap, ['DATA DE SAIDA', 'DATA DE SAÍDA']);
+  const cProgDataCarreg = getHeaderColOptional_(progMap, ['DATA DE CARREGAMENTO']);
+  const progLastRow = shProg.getLastRow();
+  const progLastCol = shProg.getLastColumn();
+  if (progLastRow <= progHeaderRow) return;
+  const progValues = shProg.getRange(progHeaderRow + 1, 1, progLastRow - progHeaderRow, progLastCol).getValues();
+  const progDisplay = shProg.getRange(progHeaderRow + 1, 1, progLastRow - progHeaderRow, progLastCol).getDisplayValues();
+  const planosByPlaca = {};
+  for (let i = 0; i < progValues.length; i++) {
+    const rv = progValues[i] || [];
+    const rd = progDisplay[i] || [];
+    const placaKey = normalizePlate_(rd[cProgPlaca - 1] || rv[cProgPlaca - 1]);
+    const placaKeyO = normalizePlate_(rd[15 - 1] || rv[15 - 1]); // Coluna O
+    const placaKeyP = normalizePlate_(rd[16 - 1] || rv[16 - 1]); // Coluna P
+    
+    if (!placaKey && !placaKeyO && !placaKeyP) continue;
+    const plano = String(rd[cProgPlanos - 1] || rv[cProgPlanos - 1] || '').trim();
+    if (!plano) continue;
+    let dtRef = null;
+    if (cProgDataSaida) dtRef = toDateOnly_(rv[cProgDataSaida - 1]) || parseDateBR_(rd[cProgDataSaida - 1]) || toDateOnly_(rd[cProgDataSaida - 1]);
+    if (!dtRef && cProgDataCarreg) dtRef = toDateOnly_(rv[cProgDataCarreg - 1]) || parseDateBR_(rd[cProgDataCarreg - 1]) || toDateOnly_(rd[cProgDataCarreg - 1]);
+    
+    const keys = [placaKey, placaKeyO, placaKeyP];
+    for (let k = 0; k < keys.length; k++) {
+      const key = keys[k];
+      if (!key) continue;
+      if (!planosByPlaca[key]) planosByPlaca[key] = [];
+      planosByPlaca[key].push({ plano: plano, dtRef: dtRef });
+    }
+  }
+
+  const dispHeaderRow = getDisponibilidadeHeaderRow_();
+  const dispMap = mapHeaders_(shDisp, dispHeaderRow);
+  const cDispData = getHeaderColOptional_(dispMap, ['DATA']);
+  const cDispPlaca = getHeaderColRequired_(dispMap, ['PLACA'], 'Disponibilidade');
+  const cDispStatus = getHeaderColOptional_(dispMap, ['DISPONIBILIDADE']);
+  let cDispPlano = getHeaderColOptional_(dispMap, ['PLANO', 'PLANO DE VIAGEM', 'PLANO VIAGEM', 'SITUACAO', 'SITUAÇÃO']);
+  if (!cDispPlano) cDispPlano = 8;
+  const cDispPlanoFixed = 8;
+  const dispLastRow = shDisp.getLastRow();
+  const dispLastCol = shDisp.getLastColumn();
+  if (dispLastRow <= dispHeaderRow) return;
+  const dispValues = shDisp.getRange(dispHeaderRow + 1, 1, dispLastRow - dispHeaderRow, dispLastCol).getValues();
+  const dispDisplay = shDisp.getRange(dispHeaderRow + 1, 1, dispLastRow - dispHeaderRow, dispLastCol).getDisplayValues();
+  for (let i = 0; i < dispValues.length; i++) {
+    const rv = dispValues[i] || [];
+    const rd = dispDisplay[i] || [];
+    const placaKey = normalizePlate_(rd[cDispPlaca - 1] || rv[cDispPlaca - 1]);
+    if (!placaKey) continue;
+    let dtDisp = null;
+    if (cDispData) dtDisp = toDateOnly_(rv[cDispData - 1]) || parseDateBR_(rd[cDispData - 1]) || toDateOnly_(rd[cDispData - 1]);
+    const candidates = planosByPlaca[placaKey] || [];
+    let matchPlano = '';
+    if (candidates.length) {
+      if (dtDisp) {
+        for (let k = 0; k < candidates.length; k++) {
+          const c = candidates[k];
+          if (c.dtRef && isSameDay_(c.dtRef, dtDisp)) {
+            matchPlano = c.plano;
+            break;
+          }
+        }
+      }
+      if (!matchPlano) matchPlano = candidates[0].plano;
+    }
+    const currentStatus = cDispStatus ? String(rd[cDispStatus - 1] || rv[cDispStatus - 1] || '').trim() : '';
+    if (matchPlano) {
+      if (cDispStatus) shDisp.getRange(dispHeaderRow + 1 + i, cDispStatus).setValue('Programado');
+      shDisp.getRange(dispHeaderRow + 1 + i, cDispPlano).setValue(matchPlano);
+      if (cDispPlanoFixed !== cDispPlano) shDisp.getRange(dispHeaderRow + 1 + i, cDispPlanoFixed).setValue(matchPlano);
+    } else if (!currentStatus || normalizeHeader_(currentStatus) === normalizeHeader_('Programado')) {
+      if (cDispStatus) shDisp.getRange(dispHeaderRow + 1 + i, cDispStatus).setValue('Disponível');
+      shDisp.getRange(dispHeaderRow + 1 + i, cDispPlano).setValue('');
+      if (cDispPlanoFixed !== cDispPlano) shDisp.getRange(dispHeaderRow + 1 + i, cDispPlanoFixed).setValue('');
+    }
+  }
+}
+
+function getQuantidadeEntregasByPlano_(planoKey) {
+  if (!planoKey) return '';
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const msgBase = findSheetCaseInsensitive_(ss, CONFIG.MESSAGE_SHEET_NAME || 'Programacao_Mensagem_Base');
+  if (!msgBase) return '';
+  const msgHeaderMap = mapHeaders_(msgBase, 1);
+  const cMsgPlanos = getHeaderColRequired_(msgHeaderMap, ['PLANOS'], 'Programacao_Mensagem_Base');
+  const cMsgQtd = getHeaderColOptional_(msgHeaderMap, ['QUANTIDADE DE ENTREGAS', 'QTD ENTREGAS', 'ENTREGAS']);
+  if (!cMsgQtd) return '';
+  const msgRows = getSheetDataRowsDisplay_(msgBase, msgBase.getLastColumn(), 1);
+  for (let i = 0; i < msgRows.length; i++) {
+    const m = msgRows[i] || [];
+    const plano = String(m[cMsgPlanos - 1] == null ? '' : m[cMsgPlanos - 1]).trim();
+    const key = normalizePlanoKeyForMatch_(plano);
+    if (key === planoKey) return m[cMsgQtd - 1];
+  }
+  return '';
+}
+
+function handleJornadaOnEdit_(e) {
+  const sh = e.range.getSheet();
+  const r = e.range.getRow();
+  if (r === 1) return;
+  const hmap = mapHeaders_(sh, 1);
+  const cChkIn = getHeaderColRequired_(hmap, ['CHEGADA NO CD'], 'Jornada');
+  const cHoraIn = getHeaderColRequired_(hmap, ['HORA CHEGADA'], 'Jornada');
+  const cChkOut = getHeaderColRequired_(hmap, ['SAIDA DO CD','SA\u00cdDA DO CD'], 'Jornada');
+  const cHoraOut = getHeaderColRequired_(hmap, ['HORA SAIDA','HORA SA\u00cdDA'], 'Jornada');
+  const cDur = getHeaderColRequired_(hmap, ['JORNADA INTERNA'], 'Jornada');
+  const cClass = getHeaderColRequired_(hmap, ['CLASSIFICACAO JORNADA', 'CLASSIFICA\u00c7\u00c3O JORNADA'], 'Jornada');
+  const c = e.range.getColumn();
+  if (c === cChkIn) {
+    if (e.value === 'TRUE') sh.getRange(r, cHoraIn).setValue(new Date());
+    else {
+      sh.getRange(r, cHoraIn).clearContent();
+      sh.getRange(r, cDur).clearContent();
+      sh.getRange(r, cClass).clearContent().setBackground(null);
+    }
+  } else if (c === cChkOut) {
+    if (e.value === 'TRUE') sh.getRange(r, cHoraOut).setValue(new Date());
+    else {
+      sh.getRange(r, cHoraOut).clearContent();
+      sh.getRange(r, cDur).clearContent();
+      sh.getRange(r, cClass).clearContent().setBackground(null);
+    }
+  }
+  const start = sh.getRange(r, cHoraIn).getValue();
+  const end = sh.getRange(r, cHoraOut).getValue();
+  if (start && end && start instanceof Date && end instanceof Date && end.getTime() >= start.getTime()) {
+    const diff = (end.getTime() - start.getTime()) / 86400000;
+    sh.getRange(r, cDur).setValue(diff).setNumberFormat('[h]:mm');
+    const hours = diff * 24;
+    let label = '';
+    let color = null;
+    if (hours <= 2) {
+      label = 'Normal';
+      color = '#c6efce';
+    } else if (hours <= 4) {
+      label = 'M\u00e9dio';
+      color = '#ffeb9c';
+    } else {
+      label = 'Cr\u00edtico';
+      color = '#ffc7ce';
+    }
+    sh.getRange(r, cClass).setValue(label).setBackground(color);
+  } else {
+    sh.getRange(r, cDur).clearContent();
+    sh.getRange(r, cClass).clearContent().setBackground(null);
+  }
+}
+
+function createJornadaDailyTrigger() {
+  const fn = 'syncJornadaInternaToday';
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    const t = triggers[i];
+    if (t.getHandlerFunction && t.getHandlerFunction() === fn) ScriptApp.deleteTrigger(t);
+  }
+  ScriptApp.newTrigger(fn).timeBased().everyDays(1).atHour(6).create();
+}
+
+// =============================================
+// WHATSAPP WEB APP — FILA DE MENSAGENS
+// =============================================
+
+var FILA_WHATSAPP_SPREADSHEET_ID_ = '1ooEtvTdPAzAynx1UaRLYR7YCO8BJLitojJjxyBqriUg';
+var FILA_WHATSAPP_SHEET_NAME_ = 'FILA_WHATSAPP';
+var FILA_WHATSAPP_HEADERS_ = ['DataHora', 'Numero', 'Mensagem', 'Status', 'EnviadoEm', 'Erro'];
+
+function getFilaWhatsAppSpreadsheet_() {
+  var ss = null;
+  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
+  if (!ss) ss = SpreadsheetApp.openById(FILA_WHATSAPP_SPREADSHEET_ID_);
+  return ss;
+}
+
+function getOrCreateFilaWhatsAppSheet_(ss) {
+  var spreadsheet = ss || getFilaWhatsAppSpreadsheet_();
+  var sheet = spreadsheet.getSheetByName(FILA_WHATSAPP_SHEET_NAME_);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(FILA_WHATSAPP_SHEET_NAME_);
+    sheet.getRange(1, 1, 1, FILA_WHATSAPP_HEADERS_.length)
+      .setValues([FILA_WHATSAPP_HEADERS_])
+      .setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(1, 160);
+    sheet.setColumnWidth(2, 140);
+    sheet.setColumnWidth(3, 500);
+    sheet.setColumnWidth(4, 110);
+    sheet.setColumnWidth(5, 160);
+    sheet.setColumnWidth(6, 200);
+  }
+  return sheet;
+}
+
+function doGet(e) {
+  try {
+    var ss = getFilaWhatsAppSpreadsheet_();
+    var sheet = ss.getSheetByName(FILA_WHATSAPP_SHEET_NAME_);
+    if (!sheet) {
+      return ContentService.createTextOutput(JSON.stringify({ messages: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return ContentService.createTextOutput(JSON.stringify({ messages: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    var data = sheet.getRange(2, 1, lastRow - 1, FILA_WHATSAPP_HEADERS_.length).getDisplayValues();
+    var pending = [];
+    for (var i = 0; i < data.length; i++) {
+      if (String(data[i][3] || '').trim() === 'PENDENTE') {
+        pending.push({
+          row: i + 2,
+          numero: data[i][1],
+          mensagem: data[i][2],
+        });
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ messages: pending }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var ss = getFilaWhatsAppSpreadsheet_();
+    var sheet = ss.getSheetByName(FILA_WHATSAPP_SHEET_NAME_);
+    if (!sheet) {
+      return ContentService.createTextOutput(JSON.stringify({ error: 'sheet not found' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    var results = body.results || [];
+    var tz = Session.getScriptTimeZone() || 'America/Sao_Paulo';
+    var now = Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy HH:mm:ss');
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var row = Number(r.row);
+      if (!row || row < 2) continue;
+      sheet.getRange(row, 4).setValue(r.ok ? '\u2705 ENVIADO' : '\u274C ERRO');
+      sheet.getRange(row, 5).setValue(now);
+      if (r.error) sheet.getRange(row, 6).setValue(String(r.error).slice(0, 200));
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, processed: results.length }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}

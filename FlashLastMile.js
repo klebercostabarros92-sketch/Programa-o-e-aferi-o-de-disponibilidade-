@@ -1,4 +1,4 @@
-﻿function gerarFlashLastMile() {
+function gerarFlashLastMile() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var dados = coletarDadosFlashLastMile_();
   var norm = normalizarDadosFlashLastMile_(dados);
@@ -36,66 +36,94 @@ function coletarDadosFlashLastMile_() {
   var hoje = toDateOnly_(new Date());
   var dataReferencia = Utilities.formatDate(hoje, tz, 'dd/MM/yyyy');
 
+  // --- COLETA DE DADOS DA PROGRAMAÇÃO PARA IDENTIFICAR UTILIZADOS ---
+  var progHeaderRow = (typeof getProgramacaoHeaderRow_ === 'function' ? getProgramacaoHeaderRow_() : 3) || 3;
+  var progMap = mapHeaders_(shProg, progHeaderRow);
+  var cProgPlaca = getHeaderColRequired_(progMap, ['PLACA'], 'PROGRAMACAO');
+  // Colunas Extras O e P conforme solicitado pelo usuário
+  var cProgPlacaO = 15; // O
+  var cProgPlacaP = 16; // P
+  var cProgPlanos = getHeaderColOptional_(progMap, ['PLANOS']);
+  var cProgDataCarreg = getHeaderColOptional_(progMap, ['DATA DE CARREGAMENTO']);
+  var cProgDataSaida = getHeaderColOptional_(progMap, ['DATA DE SAIDA', 'DATA DE SAÍDA']);
+  
+  var lastRowProg = shProg.getLastRow();
+  var placasProgramadasHoje = new Set();
+  
+  if (lastRowProg > progHeaderRow) {
+    var progRowsTxt = getSheetDataRowsDisplay_(shProg, shProg.getLastColumn(), progHeaderRow);
+    var progRowsRaw = shProg.getRange(progHeaderRow + 1, 1, lastRowProg - progHeaderRow, shProg.getLastColumn()).getValues();
+    
+    for (var j = 0; j < progRowsTxt.length; j++) {
+      var rTxt = progRowsTxt[j] || [];
+      var rRaw = progRowsRaw[j] || [];
+      
+      var dtP = null;
+      if (cProgDataCarreg) dtP = toDateOnly_(rRaw[cProgDataCarreg - 1]) || parseDateBR_(rTxt[cProgDataCarreg - 1]) || toDateOnly_(rTxt[cProgDataCarreg - 1]);
+      if (!dtP && cProgDataSaida) dtP = toDateOnly_(rRaw[cProgDataSaida - 1]) || parseDateBR_(rTxt[cProgDataSaida - 1]) || toDateOnly_(rTxt[cProgDataSaida - 1]);
+      
+      if (!dtP || !isSameDay_(dtP, hoje)) continue;
+      
+      // Placa na coluna principal
+      var pk = normalizePlate_(rTxt[cProgPlaca - 1]);
+      if (pk) placasProgramadasHoje.add(pk);
+      
+      // Placas em O e P (se houver planos vinculados ou se for o caso de importação externa)
+      var pkO = normalizePlate_(rTxt[cProgPlacaO - 1]);
+      if (pkO) placasProgramadasHoje.add(pkO);
+      var pkP = normalizePlate_(rTxt[cProgPlacaP - 1]);
+      if (pkP) placasProgramadasHoje.add(pkP);
+    }
+  }
+
+  // --- COLETA DE DISPONIBILIDADE ---
   var dispHeaderRow = (typeof getDisponibilidadeHeaderRow_ === 'function' ? getDisponibilidadeHeaderRow_() : 1) || 1;
   var dispMap = mapHeaders_(shDisp, dispHeaderRow);
   var cDispData = getHeaderColRequired_(dispMap, ['DATA'], 'DISPONIBILIDADE');
   var cDispPerfil = getHeaderColRequired_(dispMap, ['PERFIL'], 'DISPONIBILIDADE');
   var cDispStatus = getHeaderColRequired_(dispMap, ['DISPONIBILIDADE'], 'DISPONIBILIDADE');
-  var cDispPlaca = getHeaderColOptional_(dispMap, ['PLACA']);
+  var cDispPlaca = getHeaderColRequired_(dispMap, ['PLACA'], 'DISPONIBILIDADE');
   var dispRows = getSheetDataRowsDisplay_(shDisp, shDisp.getLastColumn(), dispHeaderRow);
 
   var disponibilidadePorTipo = {};
+  var utilizadosPorTipo = {};
   var seenDisp = {};
+
   for (var i = 0; i < dispRows.length; i++) {
     var rowDisp = dispRows[i] || [];
     var dtDisp = parseDateBR_(rowDisp[cDispData - 1]) || toDateOnly_(rowDisp[cDispData - 1]);
+    
+    // Filtrar pela data de hoje
     if (!dtDisp || !isSameDay_(dtDisp, hoje)) continue;
-    if (!statusDisponivelFlash_(rowDisp[cDispStatus - 1])) continue;
 
-    if (cDispPlaca) {
-      var placaKeyDisp = normalizePlate_(rowDisp[cDispPlaca - 1]);
-      if (placaKeyDisp) {
-        if (seenDisp[placaKeyDisp]) continue;
-        seenDisp[placaKeyDisp] = true;
-      }
+    var placaKeyDisp = normalizePlate_(rowDisp[cDispPlaca - 1]);
+    if (placaKeyDisp) {
+      if (seenDisp[placaKeyDisp]) continue;
+      seenDisp[placaKeyDisp] = true;
     }
+
+    var statusRaw = rowDisp[cDispStatus - 1];
+    var statusNorm = normalizeHeader_(statusRaw);
+    
+    // Consideramos "Disponível" ou "Programado" como veículos que fazem parte da frota do dia
+    var isDisponivel = (statusNorm === normalizeHeader_('Disponível') || statusNorm === normalizeHeader_('Disponivel'));
+    var isProgramadoStatus = (statusNorm === normalizeHeader_('Programado'));
+    
+    // É considerado UTILIZADO se o status estiver "Programado" OU se a placa aparecer na PROGRAMACAO de hoje
+    var isUtilizado = isProgramadoStatus || (placaKeyDisp && placasProgramadasHoje.has(placaKeyDisp));
+
+    if (!isDisponivel && !isProgramadoStatus && !isUtilizado) continue;
 
     var tipoDisp = canonicalizarTipoFlash_(rowDisp[cDispPerfil - 1]);
     if (!tipoDisp) continue;
+
+    // Total que entrou no corte/disponibilidade
     disponibilidadePorTipo[tipoDisp] = (disponibilidadePorTipo[tipoDisp] || 0) + 1;
-  }
 
-  var progHeaderRow = (typeof getProgramacaoHeaderRow_ === 'function' ? getProgramacaoHeaderRow_() : 3) || 3;
-  var progMap = mapHeaders_(shProg, progHeaderRow);
-  var cProgPerfil = getHeaderColRequired_(progMap, ['PERFIL'], 'PROGRAMACAO');
-  var cProgDataCarreg = getHeaderColOptional_(progMap, ['DATA DE CARREGAMENTO']);
-  var cProgDataSaida = getHeaderColOptional_(progMap, ['DATA DE SAIDA', 'DATA DE SAÍDA']);
-  var cProgPlaca = getHeaderColOptional_(progMap, ['PLACA']);
-  if (!cProgDataCarreg && !cProgDataSaida) {
-    throw new Error('PROGRAMACAO sem colunas de data (DATA DE CARREGAMENTO / DATA DE SAIDA).');
-  }
-
-  var progRows = getSheetDataRowsDisplay_(shProg, shProg.getLastColumn(), progHeaderRow);
-  var utilizadosPorTipo = {};
-  var seenUtil = {};
-  for (var j = 0; j < progRows.length; j++) {
-    var rowProg = progRows[j] || [];
-    var dtProg = null;
-    if (cProgDataCarreg) dtProg = parseDateBR_(rowProg[cProgDataCarreg - 1]) || toDateOnly_(rowProg[cProgDataCarreg - 1]);
-    if (!dtProg && cProgDataSaida) dtProg = parseDateBR_(rowProg[cProgDataSaida - 1]) || toDateOnly_(rowProg[cProgDataSaida - 1]);
-    if (!dtProg || !isSameDay_(dtProg, hoje)) continue;
-
-    if (cProgPlaca) {
-      var placaKeyProg = normalizePlate_(rowProg[cProgPlaca - 1]);
-      if (placaKeyProg) {
-        if (seenUtil[placaKeyProg]) continue;
-        seenUtil[placaKeyProg] = true;
-      }
+    // Se estiver programado ou utilizado, conta como utilizado no resumo
+    if (isUtilizado) {
+      utilizadosPorTipo[tipoDisp] = (utilizadosPorTipo[tipoDisp] || 0) + 1;
     }
-
-    var tipoProg = canonicalizarTipoFlash_(rowProg[cProgPerfil - 1]);
-    if (!tipoProg) continue;
-    utilizadosPorTipo[tipoProg] = (utilizadosPorTipo[tipoProg] || 0) + 1;
   }
 
   return {
@@ -149,12 +177,23 @@ function obterTiposOrdenadosFlash_(disp, util, meta) {
 function comporTiposExibicaoFlash_(tiposDin, disp, util, meta) {
   var fixed = ['FIORINO', 'HR / VAN', 'VUC', 'TOCO', 'CAVALO'];
   var out = [];
+  var seen = {};
   for (var i = 0; i < fixed.length; i++) {
     var t = fixed[i];
     out.push(t);
+    seen[t] = true;
     if (disp[t] == null) disp[t] = 0;
     if (util[t] == null) util[t] = 0;
     if (meta[t] == null) meta[t] = Number(meta[t] || 0);
+  }
+  for (var j = 0; j < (tiposDin || []).length; j++) {
+    var td = String(tiposDin[j] || '').trim();
+    if (!td || seen[td]) continue;
+    out.push(td);
+    seen[td] = true;
+    if (disp[td] == null) disp[td] = 0;
+    if (util[td] == null) util[td] = 0;
+    if (meta[td] == null) meta[td] = Number(meta[td] || 0);
   }
   return out;
 }
@@ -202,7 +241,7 @@ function montarMatrizesFlash_(dataset) {
   }
   tabelaUtil.push(['TOTAL', totalUtilizado, pctUtil]);
 
-  var tabelaCorte = [['TIPO', '2o CORTE', '% DISP']];
+  var tabelaCorte = [['TIPO', '2º CORTE', '% DISP']];
   for (var c = 0; c < tiposVisao.length; c++) {
     var tc = tiposVisao[c];
     var sc = Number(segundoCorte[tc] || 0);
@@ -430,6 +469,7 @@ function statusDisponivelFlash_(valorStatus) {
   if (!s) return true;
   if (s === normalizeHeader_('DISPONIVEL')) return true;
   if (s === normalizeHeader_('DISPONÍVEL')) return true;
+  if (s === normalizeHeader_('PROGRAMADO')) return true;
   if (s === normalizeHeader_('DISPONIVEL TOTAL')) return true;
   if (s === normalizeHeader_('DISPONIVEL PARCIAL')) return true;
   return false;
@@ -620,15 +660,16 @@ function getFlashLastMileConfig_() {
     POLL_MINUTES: 1,
     TRIGGER_FN: 'monitorarAtualizacaoFlashLastMile',
     SEND_CHAT_ON_UPDATE: true,
-    CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAQAgYbz-m4/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=n9uEx-TRY0yDAqX0rE9Uvn5TYCqbRjleiAVNFlVTkPk',
-    DASHBOARD_URL: 'https://script.google.com/macros/s/AKfycbwbZ5DQcLSfmFC_amDReIk94wD1qXb_1rDza8sRwK1Dc30Tkw40pKIMshKdykagYHWxKA/exec',
+    CHAT_WEBHOOK_URL: '',
+    DASHBOARD_URL: 'https://script.google.com/macros/s/AKfycbw-if2L28Hrvskf7Fw4WE2U0l7w1fQ4t7pZTGEqk8lsI7AIlNOqZZR2aUDBeuGzhMzmSg/exec',
     CHAT_IMAGE_FOLDER: 'FLASH_LAST_MILE_CHAT'
   };
 }
 
 function enviarFlashLastMileNoChatAgora() {
   var cfg = getFlashLastMileConfig_();
-  var webhook = String(cfg.CHAT_WEBHOOK_URL || '').trim();
+  var webhook = requireSecret('FLASH_LAST_MILE_CHAT_WEBHOOK_URL');
+  webhook = String(webhook || '').trim();
   if (!webhook) throw new Error('CHAT_WEBHOOK_URL nao configurado.');
 
   var data = typeof getFlashDashboardData_ === 'function' ? getFlashDashboardData_() : null;
@@ -653,12 +694,7 @@ function enviarFlashLastMileNoChatAgora() {
     };
   }
 
-  var imageInfo = criarImagemFlashParaChat_(data, cfg);
-  var top = (data.disponibilidade || []).slice(0, 5).map(function (x) {
-    return x.tipo + ': ' + x.qtd + ' (' + Math.round(Number(x.pctPart || 0) * 100) + '%)';
-  }).join('  |  ');
-
-  var payload = montarPayloadFlashChatComImagem_(data, imageInfo.url, top);
+  var payload = montarPayloadFlashChatTabela_(data);
 
   var r = UrlFetchApp.fetch(webhook, {
     method: 'post',
@@ -675,111 +711,267 @@ function enviarFlashLastMileNoChatAgora() {
   return {
     ok: true,
     status: code,
-    imageUrl: imageInfo.url,
-    fileId: imageInfo.fileId
+    preview: JSON.stringify(payload).slice(0, 260)
   };
 }
 
-function montarPayloadFlashChatComImagem_(data, imageUrl, topResumo) {
-  var totalDisp = Number((data.kpis && data.kpis.totalDisponivel) || 0);
-  var totalUtil = Number((data.kpis && data.kpis.totalUtilizado) || 0);
-  var pctUtil = Math.round(Number((data.kpis && data.kpis.pctUtilizacao) || 0) * 100);
-  var dataRef = String(data.dataReferencia || '-');
-  var generatedAt = String(data.generatedAt || '-');
+function montarPayloadFlashChatTabela_(data) {
+  var rows = montarLinhasResumoFlashChat_(data);
+  var dataRef = String((data && data.dataReferencia) || '-');
+  var updatedAt = String((data && data.generatedAt) || '-');
+  var kpis = (data && data.kpis) || {};
+  var totalDisp = Number(kpis.totalDisponivel || 0);
+  var totalUtil = Number(kpis.totalUtilizado || 0);
+  var pctUtil = Math.round(Number(kpis.pctUtilizacao || 0) * 100);
+  if (pctUtil > 100) pctUtil = 100;
+
+  var tipos = rows.filter(function (r) { return r.perfil !== 'Soma'; });
+  var soma = rows.length ? rows[rows.length - 1] : {
+    perfil: 'Soma',
+    baseCad: 0,
+    metaDisp: 0,
+    desvio: 0,
+    dispDia: 0,
+    utilizacao: 0,
+    pctUtilizacao: 0,
+    noShow: 0,
+    obs: ''
+  };
+
+  var metaRows = tipos
+    .filter(function (r) { return Number(r.metaDisp || 0) > 0; })
+    .map(function (r) {
+      var pctM = r.metaDisp > 0 ? Math.round((r.dispDia / r.metaDisp) * 100) : 0;
+      return { perfil: r.perfil, meta: r.metaDisp, real: r.dispDia, pct: pctM };
+    })
+    .sort(function (a, b) { return b.pct - a.pct; });
+
+  var dispTop = tipos.slice(0, 4);
+  var dispResto = tipos.slice(4);
+  var linhasDisp = dispTop.map(function (r) {
+    var status = emojiStatusUtilFlash_(r.pctUtilizacao);
+    return status + ' <b>' + escapeHtmlForChat_(r.perfil) + '</b>: D <b>' + r.dispDia + '</b> | U <b>' + r.utilizacao + '</b> | ' + barraPercentualFlash_(r.pctUtilizacao) + ' <b>' + r.pctUtilizacao + '%</b>';
+  });
+  if (dispResto.length) {
+    var restoDisp = 0;
+    var restoUtil = 0;
+    for (var i = 0; i < dispResto.length; i++) {
+      restoDisp += Number(dispResto[i].dispDia || 0);
+      restoUtil += Number(dispResto[i].utilizacao || 0);
+    }
+    var restoPct = restoDisp > 0 ? Math.round((restoUtil / restoDisp) * 100) : 0;
+    linhasDisp.push('⚪ <b>OUTROS</b>: D <b>' + restoDisp + '</b> | U <b>' + restoUtil + '</b> | ' + barraPercentualFlash_(restoPct) + ' <b>' + restoPct + '%</b>');
+  }
+
+  var linhasMeta = (metaRows.slice(0, 3)).map(function (m) {
+    return emojiStatusMetaFlash_(m.pct) + ' <b>' + escapeHtmlForChat_(m.perfil) + '</b>: M <b>' + m.meta + '</b> | R <b>' + m.real + '</b> | ' + barraPercentualMetaFarolFlash_(m.pct) + ' <b>' + m.pct + '%</b>';
+  });
+  if (!linhasMeta.length) linhasMeta = ['⚪ <b>Sem metas cadastradas</b>'];
+
+  var textFallback =
+    'FLASH GUARULHOS | Ref ' + dataRef +
+    ' | Disp ' + totalDisp +
+    ' | Util ' + totalUtil +
+    ' | ' + pctUtil + '%';
 
   return {
-    text: 'FLASH LAST MILE | Ref ' + dataRef + ' | Disp ' + totalDisp + ' | Util ' + totalUtil + ' | ' + pctUtil + '%',
+    text: textFallback,
     cardsV2: [{
       cardId: 'flash_last_mile',
       card: {
         header: {
-          title: 'FLASH LAST MILE',
-          subtitle: 'Data ref: ' + dataRef + ' | Atualizado: ' + generatedAt
+          title: '🚚 FLASH GUARULHOS',
+          subtitle: '📅 Ref ' + dataRef + ' | 🕒 Atualizado ' + updatedAt
         },
-        sections: [{
-          widgets: [
-            {
-              textParagraph: {
-                text:
-                  '<b>Total Disponível:</b> ' + totalDisp +
-                  ' &nbsp;&nbsp; <b>Total Utilizado:</b> ' + totalUtil +
-                  ' &nbsp;&nbsp; <b>% Utilização:</b> ' + pctUtil + '%'
+        sections: [
+          {
+            widgets: [
+              {
+                textParagraph: {
+                  text:
+                    '<b>📊 Resumo</b><br>' +
+                    '✅ Disp: <b>' + totalDisp + '</b> &nbsp;|&nbsp; ' +
+                    '🔧 Util: <b>' + totalUtil + '</b> &nbsp;|&nbsp; ' +
+                    '🎯 Utilização: <b>' + pctUtil + '%</b>'
+                }
               }
-            },
-            { textParagraph: { text: '<b>Top:</b> ' + (topResumo || 'Sem dados') } },
-            { image: { imageUrl: imageUrl, altText: 'FLASH LAST MILE' } }
-          ]
-        }]
+            ]
+          },
+          {
+            header: '📦 Disponível X Utilizado',
+            widgets: [{ textParagraph: { text: linhasDisp.join('<br>') } }]
+          },
+          {
+            header: '🎯 Meta X Realizado',
+            widgets: [{ textParagraph: { text: linhasMeta.join('<br>') } }]
+          }
+        ]
       }
     }]
   };
 }
 
-function criarImagemFlashParaChat_(data, cfg) {
-  var chartData = (data && data.chart) || [];
-  var dt = Charts.newDataTable();
-  dt.addColumn(Charts.ColumnType.STRING, 'Tipo');
-  dt.addColumn(Charts.ColumnType.NUMBER, 'Qtd');
-  for (var i = 0; i < chartData.length; i++) {
-    var row = chartData[i] || {};
-    var qtd = Number(row.qtd || 0);
-    if (qtd <= 0) continue;
-    dt.addRow([String(row.tipo || ''), qtd]);
-  }
+function montarLinhasResumoFlashChat_(data) {
+  var disp = data && data.disponibilidade ? data.disponibilidade : [];
+  var util = data && data.utilizados ? data.utilizados : [];
+  var metaDia = data && data.metaDiaria ? data.metaDiaria : [];
 
-  if (dt.build().getNumberOfRows() === 0) {
-    dt = Charts.newDataTable()
-      .addColumn(Charts.ColumnType.STRING, 'Tipo')
-      .addColumn(Charts.ColumnType.NUMBER, 'Qtd')
-      .addRow(['Sem dados', 1]);
-  }
+  var utilByTipo = {};
+  var metaByTipo = {};
+  var dispByTipo = {};
+  for (var i = 0; i < util.length; i++) utilByTipo[String(util[i].tipo || '').trim()] = Number(util[i].qtd || 0);
+  for (var j = 0; j < metaDia.length; j++) metaByTipo[String(metaDia[j].tipo || '').trim()] = Number(metaDia[j].meta || 0);
+  for (var k = 0; k < disp.length; k++) dispByTipo[String(disp[k].tipo || '').trim()] = Number(disp[k].qtd || 0);
 
-  var built = dt.build();
-  var chart = Charts.newPieChart()
-    .setDataTable(built)
-    .setTitle('FLASH LAST MILE - DISPONIBILIDADE')
-    .setDimensions(1200, 720)
-    .setOption('pieHole', 0.58)
-    .setOption('legend', { position: 'right', textStyle: { fontSize: 14 } })
-    .setOption('pieSliceText', 'percentage')
-    .setOption('backgroundColor', '#ffffff')
-    .build();
-
-  var blob = chart.getAs('image/png');
-  var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
-  var fileName = 'flash_last_mile_' + stamp + '.png';
-  blob.setName(fileName);
-
-  var folderName = String((cfg && cfg.CHAT_IMAGE_FOLDER) || 'FLASH_LAST_MILE_CHAT').trim();
-  var folder = getOrCreateDriveFolderByName_(folderName);
-  var file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-  limparImagensAntigasFlashChat_(folder, 25);
-
-  return {
-    fileId: file.getId(),
-    url: 'https://drive.google.com/uc?export=view&id=' + file.getId()
-  };
-}
-
-function getOrCreateDriveFolderByName_(folderName) {
-  var it = DriveApp.getFoldersByName(folderName);
-  if (it.hasNext()) return it.next();
-  return DriveApp.createFolder(folderName);
-}
-
-function limparImagensAntigasFlashChat_(folder, maxKeep) {
-  var keep = Math.max(5, Number(maxKeep || 25));
-  var files = [];
-  var it = folder.getFiles();
-  while (it.hasNext()) files.push(it.next());
-  files.sort(function (a, b) {
-    return (b.getDateCreated().getTime() - a.getDateCreated().getTime());
+  var tiposMap = {};
+  Object.keys(dispByTipo).forEach(function (t) { if (t) tiposMap[t] = true; });
+  Object.keys(utilByTipo).forEach(function (t) { if (t) tiposMap[t] = true; });
+  Object.keys(metaByTipo).forEach(function (t) { if (t) tiposMap[t] = true; });
+  var tipos = Object.keys(tiposMap).sort(function (a, b) {
+    var da = Number(dispByTipo[a] || 0);
+    var db = Number(dispByTipo[b] || 0);
+    if (db !== da) return db - da;
+    return String(a).localeCompare(String(b), 'pt-BR');
   });
-  for (var i = keep; i < files.length; i++) {
-    try { files[i].setTrashed(true); } catch (e) {}
+
+  var rows = [];
+  var sumBaseCad = 0, sumMetaDisp = 0, sumDesvio = 0, sumDispDia = 0, sumUtilizacao = 0, sumNoShow = 0;
+  for (var d = 0; d < tipos.length; d++) {
+    var tipo = tipos[d];
+    var dispQtd = Number(dispByTipo[tipo] || 0);
+    var metaQtd = Number(metaByTipo[tipo] || 0);
+    var utilQtd = Number(utilByTipo[tipo] || 0);
+    var baseCad = dispQtd;
+    var desvio = dispQtd - metaQtd;
+    var pct = dispQtd > 0 ? Math.round((utilQtd / dispQtd) * 100) : 0;
+    if (pct > 100) pct = 100;
+    var noShow = 0;
+
+    rows.push({
+      perfil: tipo,
+      baseCad: baseCad,
+      metaDisp: metaQtd,
+      desvio: desvio,
+      dispDia: dispQtd,
+      utilizacao: utilQtd,
+      pctUtilizacao: pct,
+      noShow: noShow,
+      obs: ''
+    });
+
+    sumBaseCad += baseCad;
+    sumMetaDisp += metaQtd;
+    sumDesvio += desvio;
+    sumDispDia += dispQtd;
+    sumUtilizacao += utilQtd;
+    sumNoShow += noShow;
   }
+
+  var sumPct = sumDispDia > 0 ? Math.round((sumUtilizacao / sumDispDia) * 100) : 0;
+  if (sumPct > 100) sumPct = 100;
+  rows.push({
+    perfil: 'Soma',
+    baseCad: sumBaseCad,
+    metaDisp: sumMetaDisp,
+    desvio: sumDesvio,
+    dispDia: sumDispDia,
+    utilizacao: sumUtilizacao,
+    pctUtilizacao: sumPct,
+    noShow: sumNoShow,
+    obs: ''
+  });
+  return rows;
+}
+
+function padRight_(text, len) {
+  var s = String(text == null ? '' : text);
+  if (s.length >= len) return s.slice(0, len);
+  return s + new Array(len - s.length + 1).join(' ');
+}
+
+function padLeft_(text, len) {
+  var s = String(text == null ? '' : text);
+  if (s.length >= len) return s.slice(0, len);
+  return new Array(len - s.length + 1).join(' ') + s;
+}
+
+function montarTabelaMonospaceFlash_(headers, rows, aligns) {
+  var cols = headers.length;
+  var widths = [];
+  for (var c = 0; c < cols; c++) widths[c] = String(headers[c] == null ? '' : headers[c]).length;
+
+  for (var r = 0; r < rows.length; r++) {
+    for (var c2 = 0; c2 < cols; c2++) {
+      var txt = String((rows[r] && rows[r][c2]) == null ? '' : rows[r][c2]);
+      if (txt.length > widths[c2]) widths[c2] = txt.length;
+    }
+  }
+
+  var headLine = [];
+  for (var h = 0; h < cols; h++) {
+    headLine.push(padRight_(String(headers[h] || ''), widths[h]));
+  }
+  var sepLine = [];
+  for (var s = 0; s < cols; s++) sepLine.push(new Array(widths[s] + 1).join('-'));
+
+  var body = rows.map(function (row) {
+    var line = [];
+    for (var ci = 0; ci < cols; ci++) {
+      var raw = String((row && row[ci]) == null ? '' : row[ci]);
+      var align = (aligns && aligns[ci]) || 'left';
+      line.push(align === 'right' ? padLeft_(raw, widths[ci]) : padRight_(raw, widths[ci]));
+    }
+    return line.join(' | ');
+  });
+
+  return [headLine.join(' | '), sepLine.join('-|-')].concat(body).join('\n');
+}
+
+function escapeHtmlForChat_(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function barraPercentualFlash_(pct) {
+  var n = Number(pct || 0);
+  if (!isFinite(n) || n < 0) n = 0;
+  if (n > 100) n = 100;
+  var filled = Math.round(n / 10);
+  var empty = 10 - filled;
+  return new Array(filled + 1).join('🟩') + new Array(empty + 1).join('⬜');
+}
+
+function barraPercentualMetaFarolFlash_(pct) {
+  var n = Number(pct || 0);
+  if (!isFinite(n) || n < 0) n = 0;
+  if (n > 100) n = 100;
+  var filled = Math.round(n / 10);
+  var empty = 10 - filled;
+  var fillChar = '🟥';
+  if (n >= 100) fillChar = '🟩';
+  else if (n >= 80) fillChar = '🟨';
+  else if (n >= 50) fillChar = '🟧';
+  return new Array(filled + 1).join(fillChar) + new Array(empty + 1).join('⬜');
+}
+
+function emojiStatusUtilFlash_(pct) {
+  var n = Number(pct || 0);
+  if (!isFinite(n) || n < 0) n = 0;
+  if (n >= 90) return '🔴';
+  if (n >= 70) return '🟠';
+  if (n >= 40) return '🟡';
+  return '🟢';
+}
+
+function emojiStatusMetaFlash_(pct) {
+  var n = Number(pct || 0);
+  if (!isFinite(n) || n < 0) n = 0;
+  if (n >= 100) return '🟢';
+  if (n >= 80) return '🟡';
+  if (n >= 50) return '🟠';
+  return '🔴';
 }
 
 function gerarAssinaturaFlashLastMile_() {
