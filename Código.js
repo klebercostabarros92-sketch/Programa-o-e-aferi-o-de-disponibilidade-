@@ -3913,22 +3913,18 @@ function runAtualizarDisponibilidadeClickUp_(options) {
     });
 
     ctx.step = 'fetch_clickup';
-    // Otimização Crítica: Filtrando em minúsculas para máxima compatibilidade com a API
+    // Otimização: Filtrando por Status em minúsculas (Funciona bem e traz ~200 tarefas em vez de 8000)
     const apiStatuses = [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO]
       .filter(Boolean)
       .map(function(s) { return s.toLowerCase(); });
-    const apiTags = [CONFIG.CLICKUP.UNIDADE_ALVO]
-      .filter(Boolean)
-      .map(function(t) { return t.toLowerCase(); });
 
     const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, {
       debug: debug,
-      statuses: apiStatuses,
-      tags: apiTags
+      statuses: apiStatuses
     });
     if (debug) {
-      appDebugPrint_('[DEBUG] ClickUp filtragem API concluida', {
-        solicitado: { statuses: apiStatuses, tags: apiTags },
+      appDebugPrint_('[DEBUG] ClickUp filtragem API concluida (Statuses apenas)', {
+        solicitado: { statuses: apiStatuses },
         totalRecebido: tasks.length,
       });
     }
