@@ -249,6 +249,31 @@ function _cardMetrica_(label, valor) {
     '</div></td>';
 }
 
+// ----- Helpers internos -----
+
+function _fmtMin_(totalMinutos) {
+  if (!totalMinutos && totalMinutos !== 0) return '--:--';
+  var m = Math.abs(Math.round(totalMinutos));
+  var h = Math.floor(m / 60);
+  var min = m % 60;
+  return h + 'h' + (min < 10 ? '0' : '') + min + 'min';
+}
+
+function _escHtml_(str) {
+  if (!str && str !== 0) return '';
+  if (!str && str !== 0) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function _normStr_(str) {
+  if (!str) return '';
+  return String(str).toUpperCase().trim();
+}
+
 function configurarEmailsFlash() {
   var props = PropertiesService.getScriptProperties();
   props.setProperty('FLASH_EMAIL_TO', 'erickramos@3coracoes.com.br');
