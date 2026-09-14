@@ -968,6 +968,29 @@ a.tbl-link:hover { text-decoration: underline; }
           </div>
         </div>
       </div>
+
+      <!-- Email Flash -->
+      <div style="margin-top:24px;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:20px 24px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <span style="font-size:20px;">✉️</span>
+          <div>
+            <div style="font-weight:700;font-size:15px;">Enviar Flash por Email</div>
+            <div style="font-size:12px;color:var(--text-muted);">Gera um relatório HTML completo e envia aos destinatários configurados</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn-send" style="background:var(--primary);flex:1;min-width:140px;" onclick="enviarFlashEmail('diario')" id="btn-email-diario">
+            📅 Flash Diário
+          </button>
+          <button class="btn-send" style="background:#0a7c42;flex:1;min-width:140px;" onclick="enviarFlashEmail('semanal')" id="btn-email-semanal">
+            📆 Flash Semanal
+          </button>
+          <button class="btn-send" style="background:#7c3a0a;flex:1;min-width:140px;" onclick="enviarFlashEmail('mensal')" id="btn-email-mensal">
+            🗓️ Flash Mensal
+          </button>
+        </div>
+        <div id="email-status" style="margin-top:10px;font-size:12px;color:var(--text-muted);min-height:16px;"></div>
+      </div>
     </div>
 
     <!-- ══════════════════════════════════════════ -->
@@ -1472,6 +1495,28 @@ function toast(msg,type='') {
 }
 
 function enviarTurno(tipo) { toast('✅ Flash de '+tipo+' enviado ao Google Chat!'); }
+
+function enviarFlashEmail(periodo) {
+  if(!IS_GAS){ toast('⚠️ Função disponível apenas via Google Apps Script'); return; }
+  var fnMap = { diario:'enviarFlashEmailDiario', semanal:'enviarFlashEmailSemanal', mensal:'enviarFlashEmailMensal' };
+  var fn = fnMap[periodo]; if(!fn) return;
+  var labels = { diario:'Diário', semanal:'Semanal', mensal:'Mensal' };
+  var btn = document.getElementById('btn-email-'+periodo);
+  var status = document.getElementById('email-status');
+  var origText = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled=true; btn.innerHTML='⏳ Enviando...'; }
+  if(status) status.textContent='Gerando relatório e enviando email...';
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(btn){ btn.disabled=false; btn.innerHTML=origText; }
+      if(status) status.textContent='';
+      toast('✅ Email Flash '+labels[periodo]+' enviado com sucesso!');
+    })
+    .withFailureHandler(function(e){
+      if(btn){ btn.disabled=false; btn.innerHTML=origText; }
+      if(status) status.innerHTML='<span style="color:#e55;">❌ Erro: '+(e.message||e)+'</span>';
+    })[fn]();
+}
 
 // ═══════════════════════════════════════════════════════════
 // CARREGAMENTO REAL DE DADOS (Google Apps Script)

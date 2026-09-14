@@ -616,7 +616,13 @@ function onOpen() {
     .addItem('🏭 Passagem de Turno: Jornada Interna', 'enviarFlashPassagemJornada')
     .addItem('🔵 Passagem de Turno: Disponibilidade', 'enviarFlashPassagemDisponibilidade')
     .addSeparator()
-    .addItem('🔄 Flash Passagem de Turno (Completo)', 'executarFlashPassagemTurnoAgora');
+    .addItem('🔄 Flash Passagem de Turno (Completo)', 'executarFlashPassagemTurnoAgora')
+    .addSeparator()
+    .addItem('✉️ Email Flash Diário', 'enviarFlashEmailDiario')
+    .addItem('✉️ Email Flash Semanal', 'enviarFlashEmailSemanal')
+    .addItem('✉️ Email Flash Mensal', 'enviarFlashEmailMensal')
+    .addSeparator()
+    .addItem('⚙️ Configurar Emails do Flash', 'configurarEmailsFlash');
 
   if (CONFIG.DEBUG && CONFIG.DEBUG.SHOW_MENU_ITEMS) {
     menuOps
@@ -11807,6 +11813,5 @@ function doPost(e) {
 function manuallyUpdateClickUpApiKey() {
   const newKey = 'pk_254580721_G2XVY9NUAWY8EHFSBT7IPTXJEUE1292R';
   PropertiesService.getScriptProperties().setProperty('CLICKUP_API_KEY', newKey);
-  console.log('API Key do ClickUp atualizada com sucesso!');
-  return 'OK';
+  console.log('ClickUp API Key atualizada com sucesso.');
 }
