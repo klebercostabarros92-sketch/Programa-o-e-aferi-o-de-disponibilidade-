@@ -4985,6 +4985,17 @@ function filtrarMotoristasDisponibilidade_(items, debug) {
     const unitMatch = unidade === unitTarget || tags.indexOf(unitTarget) !== -1;
     const statusMatch = status === s1 || (s2 && status === s2);
 
+    // LOG BRUTAL DE DIAGNÓSTICO (Aparece sempre para os primeiros 5)
+    if (items.indexOf(item) < 5) {
+      appDebugPrint_('[TRACE] Validando motorista ' + (items.indexOf(item) + 1), {
+        nome: item.motorista,
+        unidade: { valor: item.unidade, normalizado: unidade, alvo: unitTarget, match: unidade === unitTarget },
+        status: { valor: item.status, normalizado: status, alvo1: s1, alvo2: s2, match: statusMatch },
+        tags: { lista: item.tags, match: tags.indexOf(unitTarget) !== -1 },
+        finalMatch: unitMatch && statusMatch
+      });
+    }
+
     if (debug) {
       if (unitMatch && statusMatch) {
         appDebugPrint_('[MATCH] Motorista alvo encontrado', {
