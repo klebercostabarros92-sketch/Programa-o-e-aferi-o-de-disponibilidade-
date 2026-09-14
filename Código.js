@@ -9963,6 +9963,49 @@ function inserirQuantidadeEntregasProgramacao() {
   SpreadsheetApp.getUi().alert('Coluna "Quantidade de entregas" inserida e preenchida.');
 }
 
+/**
+ * Insere colunas em `Log_programação`: `Qtd entregas` (após `Perfil`) e `Faixa` (após `Qtd entregas`).
+ * Não altera colunas já existentes.
+ */
+function inserirColunasLogProgramacao() {
+  const ss = SpreadsheetApp.getActive();
+  const sheetName = (CFG.PROGRAMACAO_LOG && CFG.PROGRAMACAO_LOG.SHEET_NAME) || 'Log_programa\u00e7ao';
+  const sh = findSheetCaseInsensitive_(ss, sheetName);
+  if (!sh) {
+    SpreadsheetApp.getUi().alert('Aba de log não encontrada: ' + sheetName);
+    return;
+  }
+
+  const headerRow = 1;
+  const hmap = mapHeaders_(sh, headerRow);
+  const perfilCol = getHeaderColOptional_(hmap, ['PERFIL']);
+  if (!perfilCol) {
+    SpreadsheetApp.getUi().alert('Cabeçalho "Perfil" não encontrado em ' + sheetName);
+    return;
+  }
+
+  const hasQtd = getHeaderColOptional_(hmap, ['QTD ENTREGAS', 'Qtd entregas', 'QUANTIDADE DE ENTREGAS', 'ENTREGAS']);
+  const hasFaixa = getHeaderColOptional_(hmap, ['FAIXA']);
+
+  // Inserir Qtd entregas após Perfil se não existir
+  let insertAfter = perfilCol;
+  if (!hasQtd) {
+    sh.insertColumnAfter(perfilCol);
+    sh.getRange(headerRow, perfilCol + 1).setValue('Qtd entregas');
+    insertAfter = perfilCol + 1;
+  } else {
+    insertAfter = hasQtd;
+  }
+
+  // Inserir Faixa após Qtd entregas se não existir
+  if (!hasFaixa) {
+    sh.insertColumnAfter(insertAfter);
+    sh.getRange(headerRow, insertAfter + 1).setValue('Faixa');
+  }
+
+  SpreadsheetApp.getUi().alert('Colunas "Qtd entregas" e "Faixa" inseridas (quando aplicável) em ' + sheetName + '.');
+}
+
 function buildAttemicsSemPlanoRows_(options) {
   const opts = options || {};
   const ss = opts.ss || SpreadsheetApp.getActiveSpreadsheet();
