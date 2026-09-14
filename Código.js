@@ -10006,6 +10006,136 @@ function inserirColunasLogProgramacao() {
   SpreadsheetApp.getUi().alert('Colunas "Qtd entregas" e "Faixa" inseridas (quando aplicável) em ' + sheetName + '.');
 }
 
+/**
+ * Preenche a coluna `Qtd entregas` da aba `Log_programação` a partir da aba `Programaçã o`
+ * e preenche a coluna `Faixa` buscando o valor no ClickUp (lista de Programação),
+ * filtrando por unidade contendo 'GUARULHOS' e considerando apenas status 'EM ROTA' e 'FINALIZADO'.
+ */
+function preencherQtdEFaixaLogProgramacao() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // Garante colunas na aba de log
+  try { inserirColunasLogProgramacao(); } catch (e) { /* seguir mesmo que já exista */ }
+
+  const sheetName = (CFG.PROGRAMACAO_LOG && CFG.PROGRAMACAO_LOG.SHEET_NAME) || 'Log_programa\u00e7\u00e3o';
+  const shLog = findSheetCaseInsensitive_(ss, sheetName);
+  if (!shLog) throw new Error('Aba de log nao encontrada: ' + sheetName);
+
+  const headerRow = 1;
+  const hmapLog = mapHeaders_(shLog, headerRow);
+  const cPlanoLog = getHeaderColRequired_(hmapLog, ['PLANO', 'PLANO', 'Plano', 'PLANOS']);
+  const cQtdLog = getHeaderColOptional_(hmapLog, ['QTD ENTREGAS', 'Qtd entregas', 'QUANTIDADE DE ENTREGAS', 'ENTREGAS']);
+  const cFaixaLog = getHeaderColOptional_(hmapLog, ['FAIXA']);
+  if (!cQtdLog) throw new Error('Coluna "Qtd entregas" nao encontrada em ' + sheetName);
+
+  // Montar mapa plano -> quantidade a partir da aba Programacao
+  const shProg = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO || 'Programacao');
+  if (!shProg) throw new Error('Aba Programacao nao encontrada.');
+  const progHeaderRow = getProgramacaoHeaderRow_();
+  const hmapProg = mapHeaders_(shProg, progHeaderRow);
+  const cProgPlanos = getHeaderColRequired_(hmapProg, ['PLANOS'], 'Programacao');
+  // tenta achar pela coluna de cabeçalho; se nao existir, usa H (8)
+  const cProgQtd = getHeaderColOptional_(hmapProg, ['QUANTIDADE DE ENTREGAS', 'QTD ENTREGAS', 'ENTREGAS']) || 8;
+
+  const lastRowProg = shProg.getLastRow();
+  const lastColProg = shProg.getLastColumn();
+  const rowsProg = lastRowProg > progHeaderRow ? shProg.getRange(progHeaderRow + 1, 1, lastRowProg - progHeaderRow, lastColProg).getDisplayValues() : [];
+  const quantidadeByPlano = {};
+  for (let i = 0; i < rowsProg.length; i++) {
+    const r = rowsProg[i] || [];
+    const plano = String(r[cProgPlanos - 1] || '').trim();
+    if (!plano) continue;
+    const key = normalizePlanoKeyForMatch_(plano);
+    if (!key) continue;
+    if (quantidadeByPlano[key] == null) quantidadeByPlano[key] = r[cProgQtd - 1];
+  }
+
+  // Atualiza coluna Qtd entregas no Log
+  const lastRowLog = shLog.getLastRow();
+  if (lastRowLog > headerRow) {
+    const rowsLog = shLog.getRange(headerRow + 1, 1, lastRowLog - headerRow, Math.max(shLog.getLastColumn(), 1)).getDisplayValues();
+    const outQtd = [];
+    for (let i = 0; i < rowsLog.length; i++) {
+      const r = rowsLog[i] || [];
+      const planoLog = String(r[cPlanoLog - 1] || '').trim();
+      const key = normalizePlanoKeyForMatch_(planoLog);
+      const qtd = key && quantidadeByPlano[key] != null ? quantidadeByPlano[key] : '';
+      outQtd.push([qtd]);
+    }
+    if (outQtd.length) shLog.getRange(headerRow + 1, cQtdLog, outQtd.length, 1).setValues(outQtd);
+  }
+
+  // --- Preencher Faixa consultando ClickUp ---
+  if (!cFaixaLog) {
+    // sem coluna Faixa, nada a fazer
+    toast_(ss, 'Faixa nao configurada na aba de log; execucao concluida para Qtd entregas.');
+    return { ok: true, updatedQtd: true, updatedFaixa: 0 };
+  }
+
+  // Preparar lista de planos a consultar
+  const planosToFind = [];
+  for (let i = 0; i < lastRowLog - headerRow; i++) {
+    const val = String(shLog.getRange(headerRow + 1 + i, cPlanoLog).getDisplayValue() || '').trim();
+    if (val) planosToFind.push(val);
+  }
+
+  // Tenta buscar no ClickUp; se falhar (token ausente), ignora e retorna sucesso parcial
+  let faixaUpdates = 0;
+  try {
+    const cfgProg = getClickUpProgramacaoConfig_();
+    const listId = String((cfgProg && cfgProg.LIST_ID_CARDS) || CONFIG.CLICKUP.PROGRAMACAO.LIST_ID_CARDS || CONFIG.CLICKUP.LIST_ID_MOTORISTAS);
+    if (!listId) throw new Error('LIST_ID_CARDS ClickUp nao configurado.');
+
+    // Buscar apenas tasks EM ROTA e FINALIZADO
+    const tasks = fetchClickUpTasksByList_(listId, { statuses: ['EM ROTA', 'FINALIZADO'] });
+    const index = indexClickUpTasksByPlano_(tasks);
+
+    // Para cada linha do log, tenta achar task correspondente e extrair campo FAIXA
+    const faixasOut = [];
+    const rowsLogFull = shLog.getRange(headerRow + 1, 1, lastRowLog - headerRow, shLog.getLastColumn()).getValues();
+    for (let i = 0; i < rowsLogFull.length; i++) {
+      const row = rowsLogFull[i] || [];
+      const planoVal = String(row[cPlanoLog - 1] || '').trim();
+      let faixaVal = '';
+      if (planoVal) {
+        const ctx = { plano: planoVal };
+        const found = findExistingClickUpTaskForPlano_(ctx, index);
+        if (found && found.task) {
+          // Verifica unidade (filtrar Guarulhos)
+          const task = found.task;
+          const cfs = resolverCustomFieldsClickUp_(task);
+          // procura por campo que contenha 'UNIDADE' e verifica se contem 'GUARULHOS'
+          let unidadeOk = false;
+          Object.keys(cfs).forEach(function(k){
+            if (/UNIDADE/i.test(k) && String(cfs[k] || '').toUpperCase().indexOf('GUARULHOS') !== -1) unidadeOk = true;
+          });
+          if (unidadeOk) {
+            // procura campo de faixa (qualquer chave contendo 'FAIXA')
+            Object.keys(cfs).some(function(k){
+              if (/FAIXA/i.test(k)) {
+                faixaVal = String(cfs[k] || '').trim();
+                return true;
+              }
+              return false;
+            });
+          }
+        }
+      }
+      if (faixaVal) faixaUpdates++;
+      faixasOut.push([faixaVal]);
+    }
+
+    if (faixasOut.length) shLog.getRange(headerRow + 1, cFaixaLog, faixasOut.length, 1).setValues(faixasOut);
+
+  } catch (e) {
+    // Avisar que ClickUp falhou, mas Qtd entregas foi preenchida
+    toast_(ss, 'Atualizado Qtd entregas. Falha ao consultar ClickUp: ' + String(e.message || e));
+    return { ok: true, updatedQtd: true, updatedFaixa: 0, clickupError: String(e.message || e) };
+  }
+
+  toast_(ss, 'Atualizacao completa: Qtd entregas preenchida e Faixa atualizada (' + faixaUpdates + ').');
+  return { ok: true, updatedQtd: true, updatedFaixa: faixaUpdates };
+}
+
 function buildAttemicsSemPlanoRows_(options) {
   const opts = options || {};
   const ss = opts.ss || SpreadsheetApp.getActiveSpreadsheet();
