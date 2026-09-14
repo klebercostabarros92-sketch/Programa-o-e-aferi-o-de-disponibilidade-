@@ -621,7 +621,8 @@ function getFlashLastMileConfig_() {
     TRIGGER_FN: 'monitorarAtualizacaoFlashLastMile',
     SEND_CHAT_ON_UPDATE: true,
     CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAQAgYbz-m4/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=n9uEx-TRY0yDAqX0rE9Uvn5TYCqbRjleiAVNFlVTkPk',
-    DASHBOARD_URL: 'https://script.google.com/macros/s/AKfycbwobdqlQgKxsXBapDjo7qp0Sdk33xadB-Woa6floFU6dnSkdOhf5omR80xLbBEGkVNOiA/exec'
+    DASHBOARD_URL: 'https://script.google.com/macros/s/AKfycbwobdqlQgKxsXBapDjo7qp0Sdk33xadB-Woa6floFU6dnSkdOhf5omR80xLbBEGkVNOiA/exec',
+    CHAT_IMAGE_FOLDER: 'FLASH_LAST_MILE_CHAT'
   };
 }
 
@@ -652,19 +653,12 @@ function enviarFlashLastMileNoChatAgora() {
     };
   }
 
+  var imageInfo = criarImagemFlashParaChat_(data, cfg);
   var top = (data.disponibilidade || []).slice(0, 5).map(function (x) {
-    return '• ' + x.tipo + ': ' + x.qtd + ' (' + Math.round(Number(x.pctPart || 0) * 100) + '%)';
-  }).join('\\n');
+    return x.tipo + ': ' + x.qtd + ' (' + Math.round(Number(x.pctPart || 0) * 100) + '%)';
+  }).join('  |  ');
 
-  var payload = {
-    text:
-      '*FLASH LAST MILE*\\n' +
-      'Data ref: ' + (data.dataReferencia || '-') + '\\n' +
-      'Disponivel: ' + Number((data.kpis && data.kpis.totalDisponivel) || 0) +
-      ' | Utilizado: ' + Number((data.kpis && data.kpis.totalUtilizado) || 0) +
-      ' | % Utilizacao: ' + Math.round(Number((data.kpis && data.kpis.pctUtilizacao) || 0) * 100) + '%\\n\\n' +
-      (top || 'Sem dados')
-  };
+  var payload = montarPayloadFlashChatComImagem_(data, imageInfo.url, top);
 
   var r = UrlFetchApp.fetch(webhook, {
     method: 'post',
@@ -678,7 +672,114 @@ function enviarFlashLastMileNoChatAgora() {
     throw new Error('Google Chat HTTP ' + code + ': ' + body.slice(0, 300));
   }
 
-  return { ok: true, status: code, preview: payload.text.slice(0, 220) };
+  return {
+    ok: true,
+    status: code,
+    imageUrl: imageInfo.url,
+    fileId: imageInfo.fileId
+  };
+}
+
+function montarPayloadFlashChatComImagem_(data, imageUrl, topResumo) {
+  var totalDisp = Number((data.kpis && data.kpis.totalDisponivel) || 0);
+  var totalUtil = Number((data.kpis && data.kpis.totalUtilizado) || 0);
+  var pctUtil = Math.round(Number((data.kpis && data.kpis.pctUtilizacao) || 0) * 100);
+  var dataRef = String(data.dataReferencia || '-');
+  var generatedAt = String(data.generatedAt || '-');
+
+  return {
+    text: 'FLASH LAST MILE | Ref ' + dataRef + ' | Disp ' + totalDisp + ' | Util ' + totalUtil + ' | ' + pctUtil + '%',
+    cardsV2: [{
+      cardId: 'flash_last_mile',
+      card: {
+        header: {
+          title: 'FLASH LAST MILE',
+          subtitle: 'Data ref: ' + dataRef + ' | Atualizado: ' + generatedAt
+        },
+        sections: [{
+          widgets: [
+            {
+              textParagraph: {
+                text:
+                  '<b>Total Disponível:</b> ' + totalDisp +
+                  ' &nbsp;&nbsp; <b>Total Utilizado:</b> ' + totalUtil +
+                  ' &nbsp;&nbsp; <b>% Utilização:</b> ' + pctUtil + '%'
+              }
+            },
+            { textParagraph: { text: '<b>Top:</b> ' + (topResumo || 'Sem dados') } },
+            { image: { imageUrl: imageUrl, altText: 'FLASH LAST MILE' } }
+          ]
+        }]
+      }
+    }]
+  };
+}
+
+function criarImagemFlashParaChat_(data, cfg) {
+  var chartData = (data && data.chart) || [];
+  var dt = Charts.newDataTable();
+  dt.addColumn(Charts.ColumnType.STRING, 'Tipo');
+  dt.addColumn(Charts.ColumnType.NUMBER, 'Qtd');
+  for (var i = 0; i < chartData.length; i++) {
+    var row = chartData[i] || {};
+    var qtd = Number(row.qtd || 0);
+    if (qtd <= 0) continue;
+    dt.addRow([String(row.tipo || ''), qtd]);
+  }
+
+  if (dt.build().getNumberOfRows() === 0) {
+    dt = Charts.newDataTable()
+      .addColumn(Charts.ColumnType.STRING, 'Tipo')
+      .addColumn(Charts.ColumnType.NUMBER, 'Qtd')
+      .addRow(['Sem dados', 1]);
+  }
+
+  var built = dt.build();
+  var chart = Charts.newPieChart()
+    .setDataTable(built)
+    .setTitle('FLASH LAST MILE - DISPONIBILIDADE')
+    .setDimensions(1200, 720)
+    .setOption('pieHole', 0.58)
+    .setOption('legend', { position: 'right', textStyle: { fontSize: 14 } })
+    .setOption('pieSliceText', 'percentage')
+    .setOption('backgroundColor', '#ffffff')
+    .build();
+
+  var blob = chart.getAs('image/png');
+  var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+  var fileName = 'flash_last_mile_' + stamp + '.png';
+  blob.setName(fileName);
+
+  var folderName = String((cfg && cfg.CHAT_IMAGE_FOLDER) || 'FLASH_LAST_MILE_CHAT').trim();
+  var folder = getOrCreateDriveFolderByName_(folderName);
+  var file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  limparImagensAntigasFlashChat_(folder, 25);
+
+  return {
+    fileId: file.getId(),
+    url: 'https://drive.google.com/uc?export=view&id=' + file.getId()
+  };
+}
+
+function getOrCreateDriveFolderByName_(folderName) {
+  var it = DriveApp.getFoldersByName(folderName);
+  if (it.hasNext()) return it.next();
+  return DriveApp.createFolder(folderName);
+}
+
+function limparImagensAntigasFlashChat_(folder, maxKeep) {
+  var keep = Math.max(5, Number(maxKeep || 25));
+  var files = [];
+  var it = folder.getFiles();
+  while (it.hasNext()) files.push(it.next());
+  files.sort(function (a, b) {
+    return (b.getDateCreated().getTime() - a.getDateCreated().getTime());
+  });
+  for (var i = keep; i < files.length; i++) {
+    try { files[i].setTrashed(true); } catch (e) {}
+  }
 }
 
 function gerarAssinaturaFlashLastMile_() {
