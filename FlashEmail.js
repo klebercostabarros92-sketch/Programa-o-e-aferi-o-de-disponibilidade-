@@ -76,7 +76,7 @@ function _montarAssunto_(dados, periodo) {
     return '[THX] Flash Mensal — ' + Utilities.formatDate(agora, tz, 'MMMM/yyyy');
   }
   var ontemD = new Date(agora); ontemD.setDate(agora.getDate() - 1);
-  return '[THX] Flash Diário — ' + (dados.dataRefOntem || Utilities.formatDate(ontemD, tz, 'dd/MM/yyyy'));
+  return 'THX Jornada interna dos condutores - ' + (dados.dataRefOntem || Utilities.formatDate(ontemD, tz, 'dd/MM/yyyy'));
 }
 
 // ----- Montagem do HTML do email -----
