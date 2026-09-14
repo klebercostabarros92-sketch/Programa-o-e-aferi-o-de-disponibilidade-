@@ -4118,28 +4118,56 @@ function runAtualizarDisponibilidadeClickUp_(options) {
       .filter(Boolean)
       .map(function(s) { return s.toLowerCase(); });
 
-    const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, {
-      debug: debug,
-      statuses: apiStatuses
-    });
-    if (debug) {
-      appDebugPrint_('[DEBUG] ClickUp filtragem API concluida (Statuses apenas)', {
-        solicitado: { statuses: apiStatuses },
-        totalRecebido: tasks.length,
-      });
+    const MOTORISTAS_CACHE_KEY_ = 'clickup_motoristas_parsed_v1';
+    const MOTORISTAS_CACHE_TTL_S_ = 1800; // 30 minutos
+    let parsed = null;
+    let clickupTasksCount = 0;
+    let fromCache = false;
+
+    if (!debug) {
+      try {
+        const cached = CacheService.getScriptCache().get(MOTORISTAS_CACHE_KEY_);
+        if (cached) {
+          parsed = JSON.parse(cached);
+          clickupTasksCount = parsed.length;
+          fromCache = true;
+          appDebugPrint_('[INFO] Motoristas carregados do cache (sem chamada API)', { total: parsed.length });
+        }
+      } catch (eCacheRead) {}
     }
-    const parsed = tasks.map(parseClickUpTaskDisponibilidade_).filter(Boolean);
-    if (debug) {
-      appDebugPrint_('[DEBUG] ClickUp tasks parseadas', {
-        total: parsed.length,
-        amostra: parsed.slice(0, 5),
+
+    if (!parsed) {
+      const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, {
+        debug: debug,
+        statuses: apiStatuses
       });
-      appDebugPrint_('[DEBUG] ClickUp diagnostico parse', {
-        semPlaca: parsed.filter(function (x) { return !String(x.placa || '').trim(); }).length,
-        semContato: parsed.filter(function (x) { return !String(x.contato || '').trim(); }).length,
-        semUnidade: parsed.filter(function (x) { return !String(x.unidade || '').trim(); }).length,
-        semStatus: parsed.filter(function (x) { return !String(x.status || '').trim(); }).length,
-      });
+      clickupTasksCount = tasks.length;
+      if (debug) {
+        appDebugPrint_('[DEBUG] ClickUp filtragem API concluida (Statuses apenas)', {
+          solicitado: { statuses: apiStatuses },
+          totalRecebido: tasks.length,
+        });
+      }
+      parsed = tasks.map(parseClickUpTaskDisponibilidade_).filter(Boolean);
+      if (debug) {
+        appDebugPrint_('[DEBUG] ClickUp tasks parseadas', {
+          total: parsed.length,
+          amostra: parsed.slice(0, 5),
+        });
+        appDebugPrint_('[DEBUG] ClickUp diagnostico parse', {
+          semPlaca: parsed.filter(function (x) { return !String(x.placa || '').trim(); }).length,
+          semContato: parsed.filter(function (x) { return !String(x.contato || '').trim(); }).length,
+          semUnidade: parsed.filter(function (x) { return !String(x.unidade || '').trim(); }).length,
+          semStatus: parsed.filter(function (x) { return !String(x.status || '').trim(); }).length,
+        });
+      }
+      try {
+        const serialized = JSON.stringify(parsed);
+        if (serialized.length <= 95000) {
+          CacheService.getScriptCache().put(MOTORISTAS_CACHE_KEY_, serialized, MOTORISTAS_CACHE_TTL_S_);
+          appDebugPrint_('[INFO] Motoristas salvos no cache', { total: parsed.length, bytes: serialized.length });
+        }
+      } catch (eCacheWrite) {}
     }
     const filtrados = filtrarMotoristasDisponibilidade_(parsed, debug);
     if (debug) {
@@ -4169,13 +4197,14 @@ function runAtualizarDisponibilidadeClickUp_(options) {
     SpreadsheetApp.flush();
 
     appDebugPrint_('[OK] Atualizacao disponibilidade concluida', {
-      clickupTasks: tasks.length,
+      clickupTasks: clickupTasksCount,
+      fromCache: fromCache,
       parsed: parsed.length,
       filtrados: filtrados.length,
       stats: stats,
     });
 
-    return { ok: true, data: { clickupTasks: tasks.length, filtrados: filtrados.length, stats: stats } };
+    return { ok: true, data: { clickupTasks: clickupTasksCount, fromCache: fromCache, filtrados: filtrados.length, stats: stats } };
   } catch (error) {
     appDebugError_(error, ctx);
     throw error;
