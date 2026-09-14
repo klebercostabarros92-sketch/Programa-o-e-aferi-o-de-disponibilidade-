@@ -10066,6 +10066,7 @@ function preencherQtdEFaixaLogProgramacao() {
   const lastColProg = shProg.getLastColumn();
   const rowsProg = lastRowProg > progHeaderRow ? shProg.getRange(progHeaderRow + 1, 1, lastRowProg - progHeaderRow, lastColProg).getDisplayValues() : [];
   const quantidadeByPlano = {};
+  const faixaByPlano = {};
   for (let i = 0; i < rowsProg.length; i++) {
     const r = rowsProg[i] || [];
     const plano = String(r[cProgPlanos - 1] || '').trim();
@@ -10073,22 +10074,108 @@ function preencherQtdEFaixaLogProgramacao() {
     const key = normalizePlanoKeyForMatch_(plano);
     if (!key) continue;
     if (quantidadeByPlano[key] == null) quantidadeByPlano[key] = r[cProgQtd - 1];
+    // tenta ler coluna de Faixa na aba Programacao, se existir
+    try {
+      const cProgFaixa = getHeaderColOptional_(hmapProg, ['FAIXA', 'FAIXAAGENDA', 'FAIXA AGENDA', 'FAIXA KM', 'FAIXA KM (GM)']);
+      if (cProgFaixa) {
+        if (faixaByPlano[key] == null) faixaByPlano[key] = String(r[cProgFaixa - 1] || '').trim();
+      }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
-  // Atualiza coluna Qtd entregas no Log
+  // --- Atualiza colunas H (Qtd entregas) e I (Faixa) no Log lendo PLANOS da coluna E ---
+  const COL_PLANO_E = 5; // coluna E
+  const COL_QTD_OUT = 8; // coluna H
+  const COL_FAIXA_OUT = 9; // coluna I
+
   const lastRowLog = shLog.getLastRow();
-  if (lastRowLog > headerRow) {
-    const rowsLog = shLog.getRange(headerRow + 1, 1, lastRowLog - headerRow, Math.max(shLog.getLastColumn(), 1)).getDisplayValues();
-    const outQtd = [];
-    for (let i = 0; i < rowsLog.length; i++) {
-      const r = rowsLog[i] || [];
-      const planoLog = String(r[cPlanoLog - 1] || '').trim();
-      const key = normalizePlanoKeyForMatch_(planoLog);
-      const qtd = key && quantidadeByPlano[key] != null ? quantidadeByPlano[key] : '';
-      outQtd.push([qtd]);
+  const rowsLogFull = lastRowLog > headerRow ? shLog.getRange(headerRow + 1, 1, lastRowLog - headerRow, Math.max(shLog.getLastColumn(), COL_FAIXA_OUT)).getDisplayValues() : [];
+
+  // Preparar busca no ClickUp (usar a lista indicada pelo link preferencialmente)
+  let clickupTasks = [];
+  try {
+    const cfgProg = getClickUpProgramacaoConfig_();
+    const listIdPrimary = String((cfgProg && cfgProg.LIST_ID_CARDS) || CONFIG.CLICKUP.PROGRAMACAO.LIST_ID_CARDS || CONFIG.CLICKUP.LIST_ID_MOTORISTAS);
+    const listIdFromLink = '901314444197';
+    const candidateLists = [];
+    // priorizar a lista do link
+    if (listIdFromLink) candidateLists.push(listIdFromLink);
+    if (listIdPrimary && candidateLists.indexOf(listIdPrimary) === -1) candidateLists.push(listIdPrimary);
+    for (let li = 0; li < candidateLists.length; li++) {
+      try {
+        const t = fetchClickUpTasksByList_(candidateLists[li], {});
+        clickupTasks = clickupTasks.concat(t || []);
+      } catch (e) {
+        appCodeLog_('[WARN] falha ao buscar lista ClickUp: ' + candidateLists[li] + ' -> ' + String(e && e.message || e));
+      }
     }
-    if (outQtd.length) shLog.getRange(headerRow + 1, cQtdLog, outQtd.length, 1).setValues(outQtd);
+  } catch (e) {
+    appCodeLog_('[WARN] erro ao preparar fetch ClickUp: ' + String(e && e.message || e));
   }
+
+  const index = indexClickUpTasksByPlano_(clickupTasks || []);
+
+  const outQtd = [];
+  const outFaixa = [];
+  for (let i = 0; i < rowsLogFull.length; i++) {
+    const row = rowsLogFull[i] || [];
+    const planoVal = String(row[COL_PLANO_E - 1] || '').trim();
+    let qtdVal = '';
+    let faixaVal = '';
+    if (planoVal) {
+      const ctx = { plano: planoVal };
+      const found = findExistingClickUpTaskForPlano_(ctx, index);
+      if (found && found.task) {
+        const task = found.task;
+        const cfs = resolverCustomFieldsClickUp_(task) || {};
+        Object.keys(cfs).some(function(k){
+          const nk = normalizeCustomFieldKey_(k);
+          if (nk.indexOf('ENTREG') !== -1) {
+            qtdVal = String(cfs[k] || '').trim();
+            return false; // continue to also find FAIXA
+          }
+          return false;
+        });
+        Object.keys(cfs).some(function(k){
+          const nk = normalizeCustomFieldKey_(k);
+          if (nk.indexOf('FAIXA') !== -1) {
+            faixaVal = String(cfs[k] || '').trim();
+            return true;
+          }
+          return false;
+        });
+        // se qtdVal estiver vazio, tentar variações
+        if (!qtdVal) {
+          Object.keys(cfs).some(function(k){
+            const nk = normalizeCustomFieldKey_(k);
+            if (nk.indexOf('QUANT') !== -1) { qtdVal = String(cfs[k] || '').trim(); return true; }
+            return false;
+          });
+        }
+        // extrair de nome se necessario
+        if (!faixaVal) {
+          const nm = String(task.name || '').trim();
+          const mHy = nm.match(/-(.+)$/);
+          if (mHy && mHy[1]) faixaVal = mHy[1].trim();
+          if (!faixaVal) {
+            const mPar = nm.match(/\(([^)]+)\)/);
+            if (mPar && mPar[1]) faixaVal = mPar[1].trim();
+          }
+        }
+      }
+      // fallback para Programacao se ClickUp nao forneceu
+      const k = normalizePlanoKeyForMatch_(planoVal);
+      if ((!qtdVal || qtdVal === '') && k && quantidadeByPlano[k] != null) qtdVal = quantidadeByPlano[k];
+      if ((!faixaVal || faixaVal === '') && k && faixaByPlano[k]) faixaVal = faixaByPlano[k];
+    }
+    outQtd.push([qtdVal || '']);
+    outFaixa.push([faixaVal || '']);
+  }
+
+  if (outQtd.length) shLog.getRange(headerRow + 1, COL_QTD_OUT, outQtd.length, 1).setValues(outQtd);
+  if (outFaixa.length) shLog.getRange(headerRow + 1, COL_FAIXA_OUT, outFaixa.length, 1).setValues(outFaixa);
 
   // --- Preencher Faixa consultando ClickUp ---
   if (!cFaixaLog) {
@@ -10167,6 +10254,11 @@ function preencherQtdEFaixaLogProgramacao() {
               if (mPar && mPar[1]) faixaVal = mPar[1].trim();
             }
           }
+        }
+        // fallback: se nao achou faixa no ClickUp, tentar usar valor da aba Programacao
+        if (!faixaVal) {
+          const k = normalizePlanoKeyForMatch_(planoVal);
+          if (k && faixaByPlano[k]) faixaVal = faixaByPlano[k];
         }
       }
       if (faixaVal) faixaUpdates++;
