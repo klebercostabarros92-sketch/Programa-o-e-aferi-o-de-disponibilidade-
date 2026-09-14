@@ -1,4 +1,4 @@
-﻿const CONFIG = {
+const CONFIG = {
   // Configurações de Planilhas
   SHEET_PROGRAMACAO: 'Programa\u00e7\u00e3o',
   SHEET_DISPONIBILIDADE: 'Disponibilidade',
@@ -23,6 +23,9 @@
   SOURCE_SHEET_NAME: 'PROG DIARIA THX',
   TARGET_SHEET_NAME: 'Programa\u00e7\u00e3o',
   MESSAGE_SHEET_NAME: 'Programa\u00e7\u00e3o_Mensagem_Base',
+  PROGRAMACAO_LOG: {
+    SHEET_NAME: 'Log_programa\u00e7\u00e3o',
+  },
   HEADER_SCAN_MAX_ROWS: 10,
   MAIN_HEADERS: ['PLANOS', 'COMPLEMENTO', 'PERFIL', 'Data de sa\u00edda', 'Data de carregamento', 'Faixa de agenda', 'Zona', 'Placa', 'Motorista', 'GREEN MILE', 'WhatsApp', 'CLICKUP STATUS', 'CLICKUP', 'Nota fiscal'],
   MESSAGE_HEADERS: ['PLANOS', 'Hor\u00e1rio agenda', 'SENHA/PROTOC.', 'Quantidade de entregas', 'Peso', 'Valor', 'Cidades', 'Bairros'],
@@ -632,6 +635,7 @@ function onOpen() {
 
   menuClickUp
     .addItem('\u{1f4cc} Criar Cards', 'criarCardsClickUpProgramacao')
+    .addItem('Preparar Log Programa\u00e7\u00e3o', 'setupProgramacaoLog')
     .addItem('\u{1f50e} Buscando dados', 'preencherCamposCardsClickUpProgramacao')
     .addSeparator()
     .addItem('🔍 Diagnosticar IDs ClickUp', 'diagnosticarIdsClickUp')
@@ -2872,6 +2876,7 @@ function runClickUpCardsProgramacao_(options) {
       if (mode !== 'fill') upsertProgramacaoClickUpCell_(linkCell, getClickUpProgramacaoConfig_().PENDING_PREFIX + ' Processando...');
       let task = null;
       let taskId = extractClickUpTaskIdFromUrl_(currentLink);
+      let createdThisRun = false;
       try {
         step = 'resolve_task';
         if (!taskId && mode !== 'create') {
@@ -2903,7 +2908,10 @@ function runClickUpCardsProgramacao_(options) {
           }
           task = createClickUpTaskProgramacao_(row);
           taskId = String(task && task.id || '');
-          if (taskId) stats.created++;
+          if (taskId) {
+            stats.created++;
+            createdThisRun = true;
+          }
         } else {
           stats.linked += task && task.url ? 1 : 0;
         }
@@ -2916,7 +2924,16 @@ function runClickUpCardsProgramacao_(options) {
           includePlaca: true,
           softFail: mode === 'create',
         });
-        setProgramacaoClickUpStatusCell_(statusCell, fieldSync.hasErrors ? 'ERRO' : (fieldSync.complete ? 'COMPLETO' : 'PARCIAL'), fieldSync.note);
+        const finalStatusCode = fieldSync.hasErrors ? 'ERRO' : (fieldSync.complete ? 'COMPLETO' : 'PARCIAL');
+        setProgramacaoClickUpStatusCell_(statusCell, finalStatusCode, fieldSync.note);
+        if (createdThisRun && finalStatusCode !== 'ERRO') {
+          maybeAppendProgramacaoLogFromClickUpCreation_(ss, row, {
+            clickupStatus: finalStatusCode,
+            clickupNote: fieldSync.note,
+            taskId: taskId,
+            taskUrl: finalUrl,
+          });
+        }
         stats.updated++;
         if (fieldSync.hasErrors) stats.errors++;
         const planKey = normalizePlanoDigitsKey_(row.plano);
@@ -3996,6 +4013,216 @@ function setProgramacaoClickUpStatusCell_(cell, code, note) {
   cell.setFontWeight('bold');
   cell.setWrap(false);
   if (note) cell.setNote(truncateText_(String(note), 250)); else cell.clearNote();
+}
+
+function getProgramacaoLogConfig_() {
+  return CONFIG.PROGRAMACAO_LOG || {};
+}
+
+function getProgramacaoLogSheetName_() {
+  return String(getProgramacaoLogConfig_().SHEET_NAME || 'Log_programa\u00e7\u00e3o').trim();
+}
+
+function getProgramacaoLogHeaders_() {
+  return [
+    'DataHoraRegistro',
+    'DataProgramacao',
+    'DataSaida',
+    'DataCarregamento',
+    'Plano',
+    'RegiaoZona',
+    'Placa',
+    'FaixaAgenda',
+    'ClickUpStatus',
+    'ClickUpTaskId',
+    'ClickUpUrl',
+    'RowProgramacao',
+    'HashDedupe',
+  ];
+}
+
+function ensureProgramacaoLogSheet_(ss) {
+  const workbook = ss || SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = getProgramacaoLogSheetName_();
+  const sheet = workbook.getSheetByName(sheetName) || findSheetCaseInsensitive_(workbook, sheetName) || workbook.insertSheet(sheetName);
+  const headers = getProgramacaoLogHeaders_();
+  ensureHeaders_(sheet, headers, 1);
+  try {
+    sheet.setFrozenRows(1);
+    sheet.setRowHeight(1, 28);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setWrap(false);
+    sheet.setColumnWidth(1, 145);
+    sheet.setColumnWidth(2, 105);
+    sheet.setColumnWidth(3, 105);
+    sheet.setColumnWidth(4, 125);
+    sheet.setColumnWidth(5, 135);
+    sheet.setColumnWidth(6, 240);
+    sheet.setColumnWidth(8, 130);
+    sheet.setColumnWidth(11, 280);
+    sheet.setColumnWidth(13, 280);
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, headers.length).setWrap(false);
+      sheet.setRowHeights(2, lastRow - 1, 21);
+    }
+  } catch (e) {}
+  return sheet;
+}
+
+/**
+ * Retorna a lista ordenada de cabeçalhos da aba Log_programação.
+ * A ordem define a sequência das colunas na planilha.
+ */
+function getProgramacaoLogHeaders_() {
+  return [
+    'DataHoraRegistro',
+    'DataProgramacao',
+    'DataSaida',
+    'DataCarregamento',
+    'Plano',
+    'Complemento',
+    'Perfil',
+    'RegiaoZona',
+    'Placa',
+    'Motorista',
+    'FaixaAgenda',
+    'ClickUpStatus',
+    'ClickUpTaskId',
+    'ClickUpUrl',
+    'RowProgramacao',
+    'HashDedupe',
+  ];
+}
+
+/**
+ * Cria (ou retorna) a aba Log_programação com cabeçalhos formatados.
+ * A aba é protegida contra edição manual e a linha de cabeçalho fica congelada.
+ */
+function ensureProgramacaoLogSheet_(ss) {
+  const sheetName = (CONFIG.PROGRAMACAO_LOG && CONFIG.PROGRAMACAO_LOG.SHEET_NAME) || 'Log_programa\u00e7\u00e3o';
+  let sheet = findSheetCaseInsensitive_(ss, sheetName);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(sheetName);
+  const headers = getProgramacaoLogHeaders_();
+
+  // Cabeçalhos na linha 1
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  // Formatação do cabeçalho
+  const headerRange = sheet.getRange(1, 1, 1, headers.length);
+  headerRange
+    .setFontWeight('bold')
+    .setBackground('#1a73e8')
+    .setFontColor('#ffffff')
+    .setHorizontalAlignment('center')
+    .setWrap(false);
+  sheet.setFrozenRows(1);
+  sheet.setRowHeight(1, 28);
+
+  // Larguras sugeridas para melhor leitura
+  const widths = {
+    DataHoraRegistro: 155,
+    DataProgramacao: 120,
+    DataSaida: 105,
+    DataCarregamento: 130,
+    Plano: 120,
+    Complemento: 140,
+    Perfil: 100,
+    RegiaoZona: 160,
+    Placa: 90,
+    Motorista: 160,
+    FaixaAgenda: 130,
+    ClickUpStatus: 115,
+    ClickUpTaskId: 115,
+    ClickUpUrl: 250,
+    RowProgramacao: 100,
+    HashDedupe: 200,
+  };
+  for (let i = 0; i < headers.length; i++) {
+    if (widths[headers[i]]) sheet.setColumnWidth(i + 1, widths[headers[i]]);
+  }
+
+  // Move a aba para o final
+  const totalSheets = ss.getSheets().length;
+  ss.setActiveSheet(sheet);
+  ss.moveActiveSheet(totalSheets);
+
+  return sheet;
+}
+
+function setupProgramacaoLog() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureProgramacaoLogSheet_(ss);
+  toast_(ss, 'Log_programa\u00e7\u00e3o pronto.');
+}
+
+function buildProgramacaoLogDedupeHash_(rowCtx) {
+  const row = rowCtx || {};
+  const data = String(row.dataSaida || row.dataCarregamento || formatDateRefBR_(new Date())).trim();
+  return [
+    data,
+    row.plano || '',
+    normalizePlate_(row.placa || ''),
+    row.faixaAgendaProgramacao || '',
+  ].map(function (v) { return normalizeHeader_(v); }).join('|');
+}
+
+function getProgramacaoLogExistingKeys_(sheet) {
+  const headers = getProgramacaoLogHeaders_();
+  const lastRow = sheet.getLastRow();
+  const out = { byHash: {}, byTaskId: {} };
+  if (lastRow < 2) return out;
+  const hashCol = headers.indexOf('HashDedupe') + 1;
+  const taskCol = headers.indexOf('ClickUpTaskId') + 1;
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getDisplayValues();
+  for (let i = 0; i < values.length; i++) {
+    const hash = String(values[i][hashCol - 1] || '').trim();
+    const taskId = String(values[i][taskCol - 1] || '').trim();
+    if (hash) out.byHash[hash] = true;
+    if (taskId) out.byTaskId[taskId] = true;
+  }
+  return out;
+}
+
+function maybeAppendProgramacaoLogFromClickUpCreation_(ss, rowCtx, meta) {
+  const row = rowCtx || {};
+  const taskId = String((meta && meta.taskId) || '').trim();
+  const hash = buildProgramacaoLogDedupeHash_(row);
+  if (!hash && !taskId) return false;
+  const sheet = ensureProgramacaoLogSheet_(ss || SpreadsheetApp.getActiveSpreadsheet());
+  const existing = getProgramacaoLogExistingKeys_(sheet);
+  if ((hash && existing.byHash[hash]) || (taskId && existing.byTaskId[taskId])) return false;
+
+  const dataProgramacao = String(row.dataSaida || row.dataCarregamento || formatDateRefBR_(new Date())).trim();
+  const logRow = {
+    DataHoraRegistro: formatDateTimeBR_(new Date()),
+    DataProgramacao: dataProgramacao,
+    DataSaida: row.dataSaida || '',
+    DataCarregamento: row.dataCarregamento || '',
+    Plano: row.plano || '',
+    Complemento: row.complemento || '',
+    Perfil: row.perfil || '',
+    RegiaoZona: row.regiao || '',
+    Placa: row.placa || '',
+    Motorista: row.motorista || '',
+    FaixaAgenda: row.faixaAgendaProgramacao || '',
+    ClickUpStatus: String((meta && meta.clickupStatus) || '').trim(),
+    ClickUpTaskId: taskId,
+    ClickUpUrl: String((meta && meta.taskUrl) || '').trim(),
+    RowProgramacao: row.rowProgramacao || '',
+    HashDedupe: hash,
+  };
+  const headers = getProgramacaoLogHeaders_();
+  sheet.appendRow(headers.map(function (h) {
+    return Object.prototype.hasOwnProperty.call(logRow, h) ? logRow[h] : '';
+  }));
+  try {
+    const r = sheet.getLastRow();
+    sheet.getRange(r, 1, 1, headers.length).setWrap(false);
+    sheet.setRowHeight(r, 21);
+  } catch (e) {}
+  return true;
 }
 
 function normalizeInvoiceValueClickUpProgramacao_(rawValue) {
