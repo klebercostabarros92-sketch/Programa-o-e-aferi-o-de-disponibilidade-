@@ -248,3 +248,10 @@ function _cardMetrica_(label, valor) {
     '<div style="color:#ffffff;font-size:24px;font-weight:700;">' + valor + '</div>' +
     '</div></td>';
 }
+
+function configurarEmailsFlash() {
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty('FLASH_EMAIL_TO', 'erickramos@3coracoes.com.br');
+  props.setProperty('FLASH_EMAIL_CC', 'rodrigo@thxtransportes.com.br,anaerica@3coracoes.com.br,laurence@thxgroup.com.br,sidneidiniz@3coracoes.com');
+  Logger.log('Emails configurados com sucesso.');
+}
