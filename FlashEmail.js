@@ -307,14 +307,20 @@ function _escHtml_(str) {
 
 function _normStr_(str) {
   if (!str) return '';
-  return String(str).toUpperCase()
-    .replace(/[�-��-�]/g, 'A')
-    .replace(/[�-��-�]/g, 'E')
-    .replace(/[�-��-�]/g, 'I')
-    .replace(/[�-��-�]/g, 'O')
-    .replace(/[�-��-�]/g, 'U')
-    .replace(/[��]/g, 'C')
-    .trim();
+  var s = String(str).toUpperCase();
+  // A com acento (\u00C0-\u00C5 e variantes)
+  s = s.replace(/[\u00C0-\u00C5\u00E0-\u00E5]/g, 'A');
+  // E com acento (\u00C8-\u00CB e variantes)
+  s = s.replace(/[\u00C8-\u00CB\u00E8-\u00EB]/g, 'E');
+  // I com acento
+  s = s.replace(/[\u00CC-\u00CF\u00EC-\u00EF]/g, 'I');
+  // O com acento
+  s = s.replace(/[\u00D2-\u00D6\u00F2-\u00F6]/g, 'O');
+  // U com acento
+  s = s.replace(/[\u00D9-\u00DC\u00F9-\u00FC]/g, 'U');
+  // C cedilha
+  s = s.replace(/[\u00C7\u00E7]/g, 'C');
+  return s.trim();
 }
 
 function configurarEmailsFlash() {
