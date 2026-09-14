@@ -244,6 +244,85 @@ function diagnosticarEstruturaMotoristasClickUp() {
   }
 }
 
+/**
+ * Função de auto-diagnóstico para descobrir IDs de listas e campos no novo Workspace.
+ */
+function diagnosticarNovoClickUp() {
+  const teamId = '9007070798';
+  const ui = SpreadsheetApp.getUi();
+  
+  try {
+    const token = getClickUpApiKey_();
+    
+    // 1. Listar espaços para encontrar onde está a lista
+    const spacesUrl = CONFIG.CLICKUP.BASE_URL + '/team/' + teamId + '/space?archived=false';
+    const spacesResp = UrlFetchApp.fetch(spacesUrl, { headers: { Authorization: token } });
+    const spaces = JSON.parse(spacesResp.getContentText()).spaces;
+    
+    let report = '--- DIAGNÓSTICO CLICKUP (WORKSPACE ' + teamId + ') ---\n\n';
+    report += 'ESPAÇOS ENCONTRADOS:\n';
+    
+    const allLists = [];
+    
+    spaces.forEach(function(s) {
+      report += '- Space: ' + s.name + ' (ID: ' + s.id + ')\n';
+      
+      // Para cada espaço, buscar pastas e listas
+      // 2. Buscar Folders
+      const foldersUrl = CONFIG.CLICKUP.BASE_URL + '/space/' + s.id + '/folder?archived=false';
+      const foldersResp = UrlFetchApp.fetch(foldersUrl, { headers: { Authorization: token } });
+      const folders = JSON.parse(foldersResp.getContentText()).folders;
+      
+      folders.forEach(function(f) {
+        report += '  > Folder: ' + f.name + ' (ID: ' + f.id + ')\n';
+        if (f.lists) {
+          f.lists.forEach(function(l) {
+            report += '    * List: ' + l.name + ' (ID: ' + l.id + ')\n';
+            allLists.push(l);
+          });
+        }
+      });
+      
+      // 3. Buscar Listas sem pastas (Folderless)
+      const folderlessUrl = CONFIG.CLICKUP.BASE_URL + '/space/' + s.id + '/list?archived=false';
+      const flResp = UrlFetchApp.fetch(folderlessUrl, { headers: { Authorization: token } });
+      const fl = JSON.parse(flResp.getContentText()).lists;
+      fl.forEach(function(l) {
+        report += '    * List: ' + l.name + ' (ID: ' + l.id + ') [Folderless]\n';
+        allLists.push(l);
+      });
+    });
+    
+    // 4. Analisar campos da lista que parece ser a correta
+    const targetList = allLists.find(function(l) { 
+      return l.name.toUpperCase().indexOf('PROGRAMA') !== -1 || l.name.toUpperCase().indexOf('3C') !== -1; 
+    }) || (allLists.length > 0 ? allLists[0] : null);
+    
+    if (targetList) {
+      report += '\n--- ANALISANDO CAMPOS DA LISTA: ' + targetList.name + ' (' + targetList.id + ') ---\n';
+      const fieldsUrl = CONFIG.CLICKUP.BASE_URL + '/list/' + targetList.id + '/field';
+      const fieldsResp = UrlFetchApp.fetch(fieldsUrl, { headers: { Authorization: token } });
+      const fields = JSON.parse(fieldsResp.getContentText()).fields;
+      
+      fields.forEach(function(f) {
+        report += '- Campo: ' + f.name + ' | ID: ' + f.id + ' | Tipo: ' + f.type + '\n';
+      });
+    } else {
+      report += '\nNenhuma lista encontrada para análise de campos.';
+    }
+    
+    // Exibir log no console e num alerta (cortado se muito grande)
+    console.log(report);
+    ui.alert('Relatório de Diagnóstico ClickUp', report.slice(0, 1500) + (report.length > 1500 ? '\n... (continua no log)' : ''), ui.ButtonSet.OK);
+    
+    return report;
+    
+  } catch (e) {
+    ui.alert('Erro no diagnóstico: ' + e.message);
+    return 'Erro: ' + e.message;
+  }
+}
+
 function listarCamposClickUpSemAcessoEdicao(taskIdOrUrl) {
   const cfg = getClickUpProgramacaoConfig_();
   let taskId = extractClickUpTaskIdFromInput_(taskIdOrUrl);
@@ -453,7 +532,9 @@ function onOpen() {
   menuClickUp
     .addItem('\u{1f4cc} Criar Cards', 'criarCardsClickUpProgramacao')
     .addItem('\u{1f50e} Buscando dados', 'preencherCamposCardsClickUpProgramacao')
-    // .addItem('\u{1f5fa}\ufe0f Mover para o mapa', 'moverCardsClickUpParaMapa')
+    .addSeparator()
+    .addItem('\u{1f50d} Analisar Novo Workspace', 'diagnosticarNovoClickUp')
+    .addItem('\u{1f9ea} Diagnosticar Campos (Atual)', 'diagnosticarCamposClickUpProgramacao')
     ;
 
   menuOps.addToUi();
