@@ -98,7 +98,7 @@ const CONFIG = {
   },
   XML_COBRANCA: {
     TO: 'LISTA LOGISTICA SÃO PAULO <listalogisticasp@3coracoes.com.br>, Vitor Farias <vitorfarias@3coracoes.com.br>',
-    CC: 'Nathanael Silva <nathanael.silva@thxgroup.com.br>, Carlos Peixoto <carlos.peixoto@thxgroup.com.br>',
+    CC: 'Nathanael Silva <nathanael.silva@thxgroup.com.br>, Carlos Peixoto <carlos.peixoto@thxgroup.com.br>, Cristiano Castilho <cristiano.castilho@thxgroup.com.br>',
     BCC: '',
     SUBJECT_PREFIX: 'XML',
     FILTER_TODAY_ONLY: false,
