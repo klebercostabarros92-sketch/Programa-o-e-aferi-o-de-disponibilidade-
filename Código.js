@@ -3872,14 +3872,14 @@ function runAtualizarDisponibilidadeClickUp_(options) {
     });
 
     ctx.step = 'fetch_clickup';
+    // Temporariamente reduzimos os filtros na API para garantir que não estamos filtrando demais no servidor
     const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, {
       debug: debug,
-      statuses: [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO].filter(Boolean)
+      // statuses: [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO].filter(Boolean)
     });
     if (debug) {
-      appDebugPrint_('[DEBUG] ClickUp tasks baixadas', {
+      appDebugPrint_('[DEBUG] ClickUp tasks baixadas (sem filtro API)', {
         total: tasks.length,
-        pageSizeSolicitado: CONFIG.CLICKUP.PAGE_SIZE,
       });
     }
     const parsed = tasks.map(parseClickUpTaskDisponibilidade_).filter(Boolean);
@@ -4529,12 +4529,13 @@ function fetchClickUpTasksByList_(listId, options) {
       if (tasks.length) {
         appDebugPrint_('[DEBUG] ClickUp pagina amostra bruta', {
           page: page,
-          sample: tasks.slice(0, 2).map(function (t) {
+          sample: tasks.slice(0, 3).map(function (t) {
             return {
               id: t.id,
               name: t.name,
               status: t.status && t.status.status,
-              custom_fields_count: Array.isArray(t.custom_fields) ? t.custom_fields.length : 0,
+              tags: Array.isArray(t.tags) ? t.tags.map(function(tag){ return tag.name || tag; }) : [],
+              cf_count: Array.isArray(t.custom_fields) ? t.custom_fields.length : 0,
             };
           }),
         });
@@ -6692,12 +6693,21 @@ function pad2_(n) {
 
 function mapDisponibilidadeHeaders_(headers) {
   const map = {};
-  (headers || []).forEach(function (h, i) {
-    map[normalizeHeader_(h)] = i;
+  const normHeaders = (headers || []).map(function (h) { return normalizeHeader_(h); });
+  
+  normHeaders.forEach(function (norm, i) {
+    if (norm) map[norm] = i;
   });
 
+  // Fallback robusto para DATA na coluna A caso esteja vazio ou com outro nome 
+  // mas saibamos que a primeira coluna deve ser DATA.
+  let dataIdx = map[normalizeHeader_('DATA')];
+  if (dataIdx == null && normHeaders.length > 0 && !normHeaders[0]) {
+    dataIdx = 0; // Assume que a primeira coluna (vazia) é DATA se as outras baterem
+  }
+
   return {
-    data: map[normalizeHeader_('DATA')],
+    data: dataIdx,
     placa: map[normalizeHeader_('PLACA')],
     motorista: map[normalizeHeader_('MOTORISTA')],
     perfil: map[normalizeHeader_('PERFIL')],
