@@ -4886,6 +4886,33 @@ function extractClickUpTaskIdFromInput_(input) {
   return '';
 }
 
+/**
+ * Formata um número de telefone para o padrão brasileiro (XX XXXXXXXXX).
+ * Remove +55, hífens, parênteses e espaços extras.
+ * 
+ * @param {string|number} raw O valor bruto do telefone.
+ * @return {string} O telefone formatado ou o valor original se não for processável.
+ */
+function formatPhoneNumberBR_(raw) {
+  if (raw == null) return '';
+  let cleaned = String(raw).replace(/\D/g, '');
+  if (!cleaned) return '';
+
+  // Se começar com 55 e tiver 12 ou 13 dígitos, remove o 55 (DDI)
+  if (cleaned.startsWith('55') && (cleaned.length === 12 || cleaned.length === 13)) {
+    cleaned = cleaned.substring(2);
+  }
+
+  // Formata: XX XXXXXXXXX (DDD espaço Número)
+  if (cleaned.length >= 2) {
+    const ddd = cleaned.substring(0, 2);
+    const num = cleaned.substring(2);
+    return ddd + ' ' + num;
+  }
+
+  return cleaned;
+}
+
 function parseClickUpTaskDisponibilidade_(task) {
   if (!task) return null;
   const cf = resolverCustomFieldsClickUp_(task);
@@ -4912,7 +4939,7 @@ function parseClickUpTaskDisponibilidade_(task) {
     CONFIG.CLICKUP.UNIDADE_FIELD,
     'UNIDADE',
   ]);
-  const status = pickClickUpFieldValue_(cf, [
+  const status = (task.status && (task.status.status || task.status)) || pickClickUpFieldValue_(cf, [
     CONFIG.CLICKUP.STATUS_FIELD,
     'STATUS',
   ]);
@@ -4921,9 +4948,9 @@ function parseClickUpTaskDisponibilidade_(task) {
     taskId: String(task.id || '').trim(),
     taskName: String(task.name || '').trim(),
     placa: String(placa || '').trim(),
-    motorista: String(motorista || task.name || '').trim(),
+    motorista: String(motorista || task.name || '').trim().toUpperCase(),
     perfil: String(perfil || '').trim(),
-    contato: String(contato || '').trim(),
+    contato: formatPhoneNumberBR_(contato),
     unidade: String(unidade || '').trim(),
     status: String(status || '').trim(),
     tags: Array.isArray(task.tags) ? task.tags.map(function (t) { 
@@ -4982,12 +5009,15 @@ function filtrarMotoristasDisponibilidade_(items, debug) {
     const s1 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO);
     const s2 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO || '');
 
-    const unitMatch = unidade === unitTarget || unidade.indexOf(unitTarget) !== -1 || unitTarget.indexOf(unidade) !== -1 || tags.indexOf(unitTarget) !== -1;
+    const unitMatch = (unidade && unitTarget && (unidade === unitTarget || unidade.indexOf(unitTarget) !== -1 || unitTarget.indexOf(unidade) !== -1)) || tags.indexOf(unitTarget) !== -1;
     const statusMatch = status === s1 || (s2 && status === s2);
 
     // LOG BRUTAL DE DIAGNÓSTICO (FORÇADO NO CONSOLE)
-    if (items.indexOf(item) < 3) {
-      const traceMsg = '[TRACE] ' + item.motorista + ' | Unidade: ' + item.unidade + ' (' + unidade + ') | Status: ' + item.status + ' (' + status + ') | Match: ' + (unitMatch && statusMatch);
+    if (items.indexOf(item) < 5) {
+      const traceMsg = '[TRACE] ' + item.motorista + 
+        ' | Unidade: ' + item.unidade + ' (Norm: ' + unidade + ') Alvo: ' + unitTarget +
+        ' | Status: ' + item.status + ' (Norm: ' + status + ') Alvo: ' + s1 + ' / ' + s2 +
+        ' | Match: ' + (unitMatch && statusMatch);
       console.log(traceMsg);
       appDebugPrint_(traceMsg);
     }
