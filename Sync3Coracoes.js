@@ -353,7 +353,9 @@ function enviarSolicitacaoInclusaoGM7() {
     if (checked === true || checked === 'TRUE' || checked === 'true') {
       const nome = String(row[nameCol - 1] || '').trim();
       const placa = String(row[placaCol - 1] || '').trim();
-      const perfil = String(row[perfilCol - 1] || '').trim();
+      let perfil = String(row[perfilCol - 1] || '').trim();
+      // Normalizar perfil '3/4' para 'Médio 3/4' para evitar interpretação como data
+      if (/^3\s*\/\s*4$/i.test(perfil)) perfil = 'Médio 3/4';
       rowsToSend.push({nome: nome, placa: placa, perfil: perfil, rowIndex: headerRow + 1 + i});
     }
   }
