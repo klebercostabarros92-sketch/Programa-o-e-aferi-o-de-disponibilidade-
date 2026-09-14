@@ -131,7 +131,10 @@ function coletarDadosPassagemTurno_() {
     tempoMedioMin: 0,
     veiculosCarregados: [],
     veiculosEmCarregamento: [],
-    veiculosNoShow: []
+    veiculosNoShow: [],
+    somaMsPorPerfil: {},
+    countPorPerfil: {},
+    mediaPorPerfil: {}
   };
 
   if (shJornada) {
@@ -146,6 +149,7 @@ function coletarDadosPassagemTurno_() {
     var cJPlaca = getHeaderColOptional_(jMap, ['PLACA']);
     var cJMotorista = getHeaderColOptional_(jMap, ['MOTORISTA']);
     var cJPlano = getHeaderColOptional_(jMap, ['PLANO DE VIAGEM']);
+    var cJPerfil = getHeaderColOptional_(jMap, ['PERFIL', 'TIPO VEICULO', 'TIPO VEÍCULO', 'TIPO']);
 
     var jLastRow = shJornada.getLastRow();
     var jLastCol = shJornada.getLastColumn();
@@ -180,6 +184,13 @@ function coletarDadosPassagemTurno_() {
         if (!placaVal && !planoVal) continue;
 
         var jMot = cJMotorista ? String(jRow[cJMotorista - 1] || '').trim() : '';
+        var jPerf = cJPerfil ? String(jRow[cJPerfil - 1] || '').trim().toUpperCase() : '';
+        // Normaliza perfil para categorias padrão
+        if (jPerf.indexOf('FIORINO') !== -1) jPerf = 'FIORINO';
+        else if (jPerf.indexOf('HR') !== -1 || jPerf.indexOf('VAN') !== -1) jPerf = 'HR/VAN';
+        else if (jPerf.indexOf('VUC') !== -1) jPerf = 'VUC';
+        else if (jPerf.indexOf('TOCO') !== -1) jPerf = 'TOCO';
+        else if (jPerf.indexOf('CAVALO') !== -1 || jPerf.indexOf('CARRETA') !== -1) jPerf = 'CAVALO';
         var chegou = false;
         var saiu = false;
 
@@ -199,18 +210,25 @@ function coletarDadosPassagemTurno_() {
           var classeStr = cJClass ? String(jRow[cJClass - 1] || '').trim() : '';
           
           jornadaData.carregadosLiberados++;
-          jornadaData.veiculosCarregados.push({ 
-            placa: placaVal, 
+          jornadaData.veiculosCarregados.push({
+            placa: placaVal,
             motorista: jMot,
             duracao: duracaoStr,
-            classificacao: classeStr
+            classificacao: classeStr,
+            perfil: jPerf
           });
           if (cJHoraIn && cJHoraOut) {
             var hIn = jRowVal[cJHoraIn - 1];
             var hOut = jRowVal[cJHoraOut - 1];
             if (hIn instanceof Date && hOut instanceof Date && hOut.getTime() >= hIn.getTime()) {
-              jornadaData.somaDuracaoMs += (hOut.getTime() - hIn.getTime());
+              var durMs = hOut.getTime() - hIn.getTime();
+              jornadaData.somaDuracaoMs += durMs;
               jornadaData.totalFinalizados++;
+              // Acumula por perfil
+              if (jPerf) {
+                jornadaData.somaMsPorPerfil[jPerf] = (jornadaData.somaMsPorPerfil[jPerf] || 0) + durMs;
+                jornadaData.countPorPerfil[jPerf] = (jornadaData.countPorPerfil[jPerf] || 0) + 1;
+              }
             }
           }
         } else if (chegou && !saiu) {
@@ -226,6 +244,16 @@ function coletarDadosPassagemTurno_() {
 
   if (jornadaData.totalFinalizados > 0) {
     jornadaData.tempoMedioMin = Math.round((jornadaData.somaDuracaoMs / jornadaData.totalFinalizados) / 60000);
+  }
+  // Calcula média por perfil
+  var perfilKeys = Object.keys(jornadaData.countPorPerfil);
+  for (var pk = 0; pk < perfilKeys.length; pk++) {
+    var pKey = perfilKeys[pk];
+    var pCount = jornadaData.countPorPerfil[pKey];
+    var pSoma = jornadaData.somaMsPorPerfil[pKey];
+    if (pCount > 0) {
+      jornadaData.mediaPorPerfil[pKey] = { mediaMin: Math.round(pSoma / pCount / 60000), count: pCount };
+    }
   }
 
   return {
@@ -315,7 +343,7 @@ function montarPayloadPassagemTurnoChat_(data, tema) {
     var jd = d.jornada || {};
     var tempoMedioStr = jd.tempoMedioMin > 0 ? formatarMinutos_(jd.tempoMedioMin) : '--:--';
 
-    var stats = { normal: 0, medio: 0, critico: 0, noshow: 0, total: 0 };
+    var stats = { normal: 0, medio: 0, critico: 0, total: 0 };
     var jornadaLines = [];
     
     // 1. Carregados
@@ -346,17 +374,6 @@ function montarPayloadPassagemTurnoChat_(data, tema) {
       }
     }
 
-    // 3. Noshow (Não Iniciados)
-    if (jd.veiculosNoShow && jd.veiculosNoShow.length) {
-      jornadaLines.push('❌ Noshow (Aguardando/Faltante): <b>' + jd.veiculosNoShow.length + '</b>');
-      for (var n = 0; n < jd.veiculosNoShow.length; n++) {
-        var vn = jd.veiculosNoShow[n];
-        stats.noshow++;
-        stats.total++;
-        jornadaLines.push('&nbsp;&nbsp;&nbsp;&nbsp;• ' + escapeHtmlForChat_(vn.placa) + ' — ' + escapeHtmlForChat_(vn.motorista) + ' — <b><font color="#999999">Noshow</font></b>');
-      }
-    }
-
     jornadaLines.push('⏱️ Tempo médio de carregamento: <b>' + tempoMedioStr + '</b>');
 
     sections.push({
@@ -369,17 +386,42 @@ function montarPayloadPassagemTurnoChat_(data, tema) {
       var pNormal = Math.round((stats.normal / stats.total) * 100);
       var pMedio = Math.round((stats.medio / stats.total) * 100);
       var pCritico = Math.round((stats.critico / stats.total) * 100);
-      var pNoshow = Math.round((stats.noshow / stats.total) * 100);
-      
+
       var resText = '<b>📈 Resumo de Classificação:</b><br>' +
         '🟢 Normal: ' + pNormal + '% (' + stats.normal + ') | ' +
         '🟡 Médio: ' + pMedio + '% (' + stats.medio + ') | ' +
-        '🔴 Crítico: ' + pCritico + '% (' + stats.critico + ') | ' +
-        '⚪ Noshow: ' + pNoshow + '% (' + stats.noshow + ')';
-        
+        '🔴 Crítico: ' + pCritico + '% (' + stats.critico + ')';
+
       sections.push({ widgets: [{ textParagraph: { text: resText } }] });
     }
-    
+
+    // --- Análise de tempo médio por perfil de veículo ---
+    var mediaPorPerfil = jd.mediaPorPerfil || {};
+    var perfilOrdem = ['FIORINO', 'HR/VAN', 'VUC', 'TOCO', 'CAVALO'];
+    var perfilEmoji = { 'FIORINO': '🚗', 'HR/VAN': '🚐', 'VUC': '🚛', 'TOCO': '🚚', 'CAVALO': '🔴' };
+    var perfilLines = [];
+    // Perfis na ordem padrão
+    for (var pi = 0; pi < perfilOrdem.length; pi++) {
+      var pNome = perfilOrdem[pi];
+      if (mediaPorPerfil[pNome]) {
+        var pm = mediaPorPerfil[pNome];
+        perfilLines.push((perfilEmoji[pNome] || '🚘') + ' ' + pNome + ': <b>' + formatarMinutos_(pm.mediaMin) + '</b> (' + pm.count + ' veic.)');
+      }
+    }
+    // Perfis fora da ordem padrão (outros)
+    var outrosPerfisMp = Object.keys(mediaPorPerfil);
+    for (var opi = 0; opi < outrosPerfisMp.length; opi++) {
+      var opNome = outrosPerfisMp[opi];
+      if (perfilOrdem.indexOf(opNome) === -1) {
+        var opm = mediaPorPerfil[opNome];
+        perfilLines.push('🚘 ' + opNome + ': <b>' + formatarMinutos_(opm.mediaMin) + '</b> (' + opm.count + ' veic.)');
+      }
+    }
+    if (perfilLines.length > 0) {
+      var perfilText = '<b>📊 Média por Tipo de Veículo:</b><br>' + perfilLines.join('<br>');
+      sections.push({ widgets: [{ textParagraph: { text: perfilText } }] });
+    }
+
     if (t === 'JORNADA') {
       title = '🏭 JORNADA INTERNA Referente a ' + useDate;
       fallbackText = 'Jornada Interna | ' + jd.carregadosLiberados + ' ok | ' + jd.emCarregamento + ' em carg.';
@@ -401,46 +443,29 @@ function montarPayloadPassagemTurnoChat_(data, tema) {
   };
 }
 
-// ----- Envio para o webhook -----
+// ----- Envio ao Google Chat -----
 function enviarPassagemTurnoChat_(payload) {
   var webhook = PASSAGEM_TURNO_WEBHOOK_;
-  if (!webhook) throw new Error('Webhook de Passagem de Turno não configurado.');
-
-  var r = UrlFetchApp.fetch(webhook, {
+  if (typeof PropertiesService !== 'undefined') {
+    try {
+      var prop = PropertiesService.getScriptProperties().getProperty('FLASH_LAST_MILE_CHAT_WEBHOOK_URL');
+      if (prop) webhook = prop;
+    } catch (e) {}
+  }
+  var options = {
     method: 'post',
-    contentType: 'application/json; charset=utf-8',
+    contentType: 'application/json',
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
-  });
-
-  var code = r.getResponseCode();
-  var body = r.getContentText() || '';
-  if (code < 200 || code >= 300) {
-    throw new Error('Google Chat HTTP ' + code + ': ' + body.slice(0, 300));
-  }
-  return { ok: true, status: code };
+  };
+  var response = UrlFetchApp.fetch(webhook, options);
+  return { code: response.getResponseCode(), body: response.getContentText() };
 }
 
-// ----- Helpers -----
-function barraPercentualPassagemTurno_(pct) {
-  var n = Number(pct || 0);
-  if (!isFinite(n) || n < 0) n = 0;
-  if (n > 100) n = 100;
-  var filled = Math.round(n / 10);
-  var empty = 10 - filled;
-  return new Array(filled + 1).join('🟩') + new Array(empty + 1).join('⬜');
-}
-
-function emojiStatusPassagemTurno_(pct) {
-  var n = Number(pct || 0);
-  if (n >= 90) return '🟢';
-  if (n >= 70) return '🟡';
-  if (n >= 40) return '🟠';
-  return '🔴';
-}
-
-function formatarMinutos_(totalMin) {
-  var h = Math.floor(totalMin / 60);
-  var m = totalMin % 60;
-  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+// ----- Utilitários -----
+function formatarMinutos_(totalMinutos) {
+  if (!totalMinutos || totalMinutos <= 0) return '--:--';
+  var h = Math.floor(totalMinutos / 60);
+  var m = totalMinutos % 60;
+  return h + ':' + (m < 10 ? '0' : '') + m;
 }
