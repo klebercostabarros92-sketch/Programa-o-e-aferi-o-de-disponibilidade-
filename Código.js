@@ -9888,6 +9888,80 @@ function setupProgramacaoColumns() {
   setupProgramacaoStatusColumns_();
 }
 
+/**
+ * Insere uma coluna "Quantidade de entregas" após a coluna "Zona" na aba Programação
+ * e popula os valores buscando a quantidade na folha de mensagem base (Programacao_Mensagem_Base),
+ * quando houver correspondência pelo plano. Se já existir a coluna, não faz nada.
+ */
+function inserirQuantidadeEntregasProgramacao() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = findSheetCaseInsensitive_(ss, CFG.SHEET_PROGRAMACAO);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('Aba Programação não encontrada.');
+    return;
+  }
+
+  const headerRow = getProgramacaoHeaderRow_();
+  const hmap = mapHeaders_(sheet, headerRow);
+  const existingQtdCol = getHeaderColOptional_(hmap, ['QUANTIDADE DE ENTREGAS', 'QTD ENTREGAS', 'ENTREGAS']);
+  if (existingQtdCol) {
+    SpreadsheetApp.getUi().alert('A coluna "Quantidade de entregas" já existe na aba Programação.');
+    return;
+  }
+
+  const zonaCol = getHeaderColOptional_(hmap, ['ZONA']);
+  if (!zonaCol) {
+    SpreadsheetApp.getUi().alert('Cabeçalho "Zona" não encontrado.');
+    return;
+  }
+
+  // Inserir coluna após Zona
+  sheet.insertColumnAfter(zonaCol);
+  const newCol = zonaCol + 1;
+  sheet.getRange(headerRow, newCol).setValue('Quantidade de entregas');
+
+  // Montar mapa quantidadeByPlano a partir da Message Base (quando existir)
+  const quantidadeByPlano = {};
+  const msgBase = findSheetCaseInsensitive_(ss, CONFIG.MESSAGE_SHEET_NAME || 'Programacao_Mensagem_Base');
+  if (msgBase) {
+    const msgHeaderMap = mapHeaders_(msgBase, 1);
+    const cMsgPlanos = getHeaderColOptional_(msgHeaderMap, ['PLANOS']);
+    const cMsgQtd = getHeaderColOptional_(msgHeaderMap, ['QUANTIDADE DE ENTREGAS', 'QTD ENTREGAS', 'ENTREGAS']);
+    if (cMsgPlanos && cMsgQtd) {
+      const msgRows = getSheetDataRowsDisplay_(msgBase, msgBase.getLastColumn(), 1);
+      for (let i = 0; i < msgRows.length; i++) {
+        const m = msgRows[i] || [];
+        const plano = String(m[cMsgPlanos - 1] == null ? '' : m[cMsgPlanos - 1]).trim();
+        const key = normalizePlanoKeyForMatch_(plano);
+        if (!key) continue;
+        if (quantidadeByPlano[key] == null) quantidadeByPlano[key] = m[cMsgQtd - 1];
+      }
+    }
+  }
+
+  // Ler Programação e preencher a nova coluna
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= headerRow) return;
+  const lastCol = sheet.getLastColumn();
+  const rowsDisplay = sheet.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getDisplayValues();
+  const cPlanos = getHeaderColRequired_(hmap, ['PLANOS'], 'Programacao');
+
+  const out = [];
+  for (let i = 0; i < rowsDisplay.length; i++) {
+    const r = rowsDisplay[i] || [];
+    const planoDisplay = String(r[cPlanos - 1] == null ? '' : r[cPlanos - 1]).trim();
+    const key = normalizePlanoKeyForMatch_(planoDisplay);
+    const qtd = key && quantidadeByPlano[key] != null ? quantidadeByPlano[key] : '';
+    out.push([qtd]);
+  }
+
+  if (out.length) {
+    sheet.getRange(headerRow + 1, newCol, out.length, 1).setValues(out);
+  }
+
+  SpreadsheetApp.getUi().alert('Coluna "Quantidade de entregas" inserida e preenchida.');
+}
+
 function buildAttemicsSemPlanoRows_(options) {
   const opts = options || {};
   const ss = opts.ss || SpreadsheetApp.getActiveSpreadsheet();
