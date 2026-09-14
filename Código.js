@@ -3266,7 +3266,15 @@ function indexClickUpTasksByPlano_(tasks) {
         if (possible) keys.push(possible);
       } catch (e) {}
     }
-    keys.forEach(function (k) { if (k && !out.byPlanoKey[k]) out.byPlanoKey[k] = { task: task }; });
+    keys.forEach(function (k) {
+      if (!k) return;
+      if (!out.byPlanoKey[k]) out.byPlanoKey[k] = { task: task };
+      // se a chave for apenas dígitos e maior que 10, adicionar também a versão truncada em 10 dígitos
+      if (/^\d+$/.test(k) && k.length > 10) {
+        const t10 = k.slice(0, 10);
+        if (!out.byPlanoKey[t10]) out.byPlanoKey[t10] = { task: task };
+      }
+    });
   });
   return out;
 }
