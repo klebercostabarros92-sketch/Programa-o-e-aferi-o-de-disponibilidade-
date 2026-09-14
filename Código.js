@@ -416,24 +416,23 @@ function migrateHardcodedSecretsToProperties(input) {
   candidates[SECRET_KEYS_.FLASH_LAST_MILE_CHAT_WEBHOOK_URL] = getInputValue_(payload, ['flashLastMileChatWebhookUrl', 'chatWebhookUrl']) || legacyHardcoded.FLASH_LAST_MILE_CHAT_WEBHOOK_URL;
 
   Object.keys(candidates).forEach(function (key) {
-    const existing = String(props.getProperty(key) || '').trim();
-    if (existing) {
-      alreadyExisted.push(key);
-      return;
-    }
-
     const candidate = String(candidates[key] || '').trim();
     if (!candidate) {
       missingInput.push(key);
       return;
     }
 
-    toCreate[key] = candidate;
-    created.push(key);
+    const existing = String(props.getProperty(key) || '').trim();
+    if (existing !== candidate) {
+      toCreate[key] = candidate;
+      created.push(key);
+    } else {
+      alreadyExisted.push(key);
+    }
   });
 
   if (Object.keys(toCreate).length) {
-    props.setProperties(toCreate, true);
+    props.setProperties(toCreate, false);
   }
 
   return {
