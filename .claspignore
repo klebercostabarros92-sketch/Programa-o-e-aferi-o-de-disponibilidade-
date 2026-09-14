@@ -1,0 +1,4 @@
+ssw-ciot-app-main/**
+.sixth/**
+node_modules/**
+dist/**

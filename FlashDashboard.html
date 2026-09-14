@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FLASH LAST MILE</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --card: #f8fafc;
+        --line: #d1d5db;
+        --text: #0f172a;
+        --muted: #6b7280;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(900px 500px at -10% -20%, #1e3a8a66 0%, transparent 60%),
+          radial-gradient(700px 500px at 110% 0%, #0891b266 0%, transparent 60%),
+          var(--bg);
+        color: #e5e7eb;
+        font-family: 'Space Grotesk', sans-serif;
+      }
+      .wrap {
+        max-width: 1380px;
+        margin: 18px auto;
+        padding: 14px;
+      }
+      .topbar {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+        background: linear-gradient(90deg, #0b1224, #0f172a);
+        border: 1px solid #1f2937;
+        border-radius: 14px;
+        padding: 14px 16px;
+      }
+      .title {
+        font-size: 34px;
+        letter-spacing: .6px;
+        font-weight: 700;
+      }
+      .pill {
+        background: #0b1224;
+        border: 1px solid #334155;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 13px;
+        color: #cbd5e1;
+      }
+      .grid-kpi {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+      .kpi {
+        background: var(--card);
+        color: var(--text);
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        padding: 12px;
+      }
+      .kpi .k {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+      }
+      .kpi .v {
+        margin-top: 6px;
+        font-size: 30px;
+        font-family: 'IBM Plex Mono', monospace;
+      }
+      .main {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1.1fr .9fr;
+        gap: 12px;
+      }
+      .left {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .card {
+        background: var(--card);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .card h3 {
+        margin: 0;
+        padding: 10px 12px;
+        font-size: 14px;
+        text-transform: uppercase;
+        background: #e2e8f0;
+        border-bottom: 1px solid var(--line);
+      }
+      table { width: 100%; border-collapse: collapse; }
+      th, td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 7px 10px;
+        font-size: 13px;
+        text-align: center;
+      }
+      th { background: #f1f5f9; font-weight: 700; }
+      tr:last-child td { border-bottom: none; }
+      .right {
+        background: linear-gradient(180deg, #1f2937, #0f172a);
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 12px;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 620px;
+      }
+      .right h3 { margin: 0; text-align: center; font-size: 28px; }
+      .donut-zone {
+        display: grid;
+        grid-template-columns: 1fr;
+        place-items: center;
+      }
+      .donut {
+        width: min(420px, 80%);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        position: relative;
+        box-shadow: 0 20px 50px #00000044;
+      }
+      .donut::before {
+        content: '';
+        position: absolute;
+        inset: 30%;
+        border-radius: 50%;
+        background: #0f172a;
+        box-shadow: inset 0 0 0 2px #475569;
+      }
+      .donut-center {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 26px;
+        color: #e2e8f0;
+      }
+      .legend {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+        background: #0b1224;
+        border: 1px solid #334155;
+      }
+      .legend th, .legend td {
+        border-bottom: 1px solid #1f2937;
+        padding: 8px;
+        color: #e5e7eb;
+      }
+      .legend th { background: #111827; }
+      .dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 7px;
+      }
+      @media (max-width: 1100px) {
+        .main { grid-template-columns: 1fr; }
+        .right { min-height: 520px; }
+      }
+      @media (max-width: 760px) {
+        .grid-kpi { grid-template-columns: 1fr 1fr; }
+        .left { grid-template-columns: 1fr; }
+        .title { font-size: 26px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="title">FLASH LAST MILE</div>
+        <div class="pill" id="ref"></div>
+        <div class="pill" id="updated"></div>
+      </div>
+
+      <div class="grid-kpi">
+        <div class="kpi"><div class="k">Total Disponivel</div><div class="v" id="kTotalDisp">0</div></div>
+        <div class="kpi"><div class="k">Total Utilizado</div><div class="v" id="kTotalUtil">0</div></div>
+        <div class="kpi"><div class="k">% Utilizacao</div><div class="v" id="kPctUtil">0%</div></div>
+        <div class="kpi"><div class="k">Segundo Corte Total</div><div class="v" id="kSegundo">0</div></div>
+      </div>
+
+      <div class="main">
+        <div class="left">
+          <div class="card"><h3>Disponibilidade</h3><table id="tbDisp"></table></div>
+          <div class="card"><h3>Utilizados</h3><table id="tbUtil"></table></div>
+          <div class="card"><h3>2o Corte</h3><table id="tbCorte"></table></div>
+          <div class="card"><h3>Meta e Resultado</h3><table id="tbMeta"></table><table id="tbMetaDia"></table></div>
+        </div>
+        <div class="right">
+          <h3>DISPONIBILIDADE</h3>
+          <div class="donut-zone">
+            <div class="donut" id="donut"><div class="donut-center" id="donutCenter">0</div></div>
+          </div>
+          <table class="legend" id="tbLegend"></table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var DATA = (function () {
+        try { return JSON.parse(<?!= JSON.stringify(payload) ?> || '{}'); }
+        catch (e) { return {}; }
+      })();
+      var COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#22c55e', '#a855f7', '#06b6d4', '#84cc16'];
+      function pct(v) { var n = Number(v || 0); return Math.round(n * 100) + '%'; }
+      function int(v) { return Number(v || 0).toLocaleString('pt-BR'); }
+
+      function renderSimpleTable(elId, headers, rows) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        var h = '<tr>' + headers.map(function (x) { return '<th>' + x + '</th>'; }).join('') + '</tr>';
+        var b = rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('');
+        el.innerHTML = h + b;
+      }
+
+      function render(data) {
+        data = data || {};
+        var k = data.kpis || {};
+        document.getElementById('ref').textContent = 'Data ref: ' + (data.dataReferencia || '-');
+        document.getElementById('updated').textContent = 'Atualizado: ' + (data.generatedAt || '-');
+        document.getElementById('kTotalDisp').textContent = int(k.totalDisponivel);
+        document.getElementById('kTotalUtil').textContent = int(k.totalUtilizado);
+        document.getElementById('kPctUtil').textContent = pct(k.pctUtilizacao);
+        var segundo = (data.segundoCorte || []).reduce(function (acc, x) { return acc + Number(x.qtd || 0); }, 0);
+        document.getElementById('kSegundo').textContent = int(segundo);
+
+        var dispRows = (data.disponibilidade || []).map(function (x) { return [x.tipo, int(x.qtd), pct(x.pctMeta), pct(x.pctPart)]; });
+        dispRows.push(['TOTAL', int((data.kpis && data.kpis.totalDisponivel) || 0), '', '']);
+        renderSimpleTable('tbDisp', ['TIPO', 'DISPONIVEL', '% META', '% PART'], dispRows);
+
+        var utilRows = (data.utilizados || []).map(function (x) { return [x.tipo, int(x.qtd), pct(Math.min(1, Number(x.pctDisp || 0)))]; });
+        utilRows.push(['TOTAL', int((data.kpis && data.kpis.totalUtilizado) || 0), pct(k.pctUtilizacao)]);
+        renderSimpleTable('tbUtil', ['TIPO', 'UTILIZADO', '% DISP'], utilRows);
+
+        var corteRows = (data.segundoCorte || []).map(function (x) { return [x.tipo, int(x.qtd), pct(Math.min(1, Number(x.pctDisp || 0)))]; });
+        renderSimpleTable('tbCorte', ['TIPO', '2o CORTE', '% DISP'], corteRows);
+
+        var metaRows = (data.metaDiaria || []).map(function (x) { return [x.tipo, int(x.meta)]; });
+        renderSimpleTable('tbMeta', ['TIPO', 'META'], metaRows);
+
+        var mdRows = (data.metaObtida || []).map(function (x) { return [x.tipo, int(x.realizado), pct(x.pctMeta)]; });
+        renderSimpleTable('tbMetaDia', ['TIPO', 'REALIZADO', '% META'], mdRows);
+
+        renderDonut(data.chart || [], (data.kpis && data.kpis.totalDisponivel) || 0);
+      }
+
+      function renderDonut(slices, total) {
+        var donut = document.getElementById('donut');
+        var center = document.getElementById('donutCenter');
+        var tbLegend = document.getElementById('tbLegend');
+        if (!donut || !center || !tbLegend) return;
+
+        var filtered = (slices || []).filter(function (x) { return Number(x.qtd || 0) > 0; });
+        if (!filtered.length) {
+          donut.style.background = '#334155';
+          center.textContent = '0';
+          tbLegend.innerHTML = '<tr><th>Tipo</th><th>Qtd</th><th>%</th></tr><tr><td colspan=\"3\">Sem dados</td></tr>';
+          return;
+        }
+
+        var acc = 0;
+        var parts = [];
+        var legend = '<tr><th>Tipo</th><th>Qtd</th><th>%</th></tr>';
+        for (var i = 0; i < filtered.length; i++) {
+          var s = filtered[i];
+          var p = Number(s.pct || 0) * 100;
+          var start = acc;
+          acc += p;
+          var color = COLORS[i % COLORS.length];
+          parts.push(color + ' ' + start.toFixed(2) + '% ' + acc.toFixed(2) + '%');
+          legend += '<tr><td style=\"text-align:left\"><span class=\"dot\" style=\"background:' + color + '\"></span>' + s.tipo + '</td><td>' + int(s.qtd) + '</td><td>' + Math.round(p) + '%</td></tr>';
+        }
+
+        donut.style.background = 'conic-gradient(' + parts.join(',') + ')';
+        center.textContent = int(total);
+        tbLegend.innerHTML = legend;
+      }
+
+      function refreshData() {
+        if (!google || !google.script || !google.script.run) return;
+        google.script.run.withSuccessHandler(function (data) { render(data); }).withFailureHandler(function () {}).getFlashDashboardData();
+      }
+
+      render(DATA);
+      setInterval(refreshData, 60000);
+    </script>
+  </body>
+</html>

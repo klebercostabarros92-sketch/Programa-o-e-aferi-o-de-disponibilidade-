@@ -1,0 +1,1 @@
+﻿// integrado em Código.js
