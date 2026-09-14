@@ -3457,13 +3457,39 @@ function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx, options) {
 
   // Atualiza os fields em lote (massa) para este card.
   if (pendingFieldRequests.length) {
-    const requests = pendingFieldRequests.map(function (item) {
-      return buildClickUpTaskCustomFieldRequest_(taskId, item.fieldId, item.value);
-    });
+    const requests = [];
+    const requestMetas = [];
+    for (let i = 0; i < pendingFieldRequests.length; i++) {
+      const item = pendingFieldRequests[i];
+      try {
+        requests.push(buildClickUpTaskCustomFieldRequest_(taskId, item.fieldId, item.value));
+        requestMetas.push(item);
+      } catch (eBuild) {
+        const buildMsg = String(eBuild && eBuild.message ? eBuild.message : eBuild);
+        const isJanelaBuildError = /Janela de coleta|Janela/i.test(String(item && item.label || '')) || /Janela de coleta|Janela/i.test(buildMsg);
+        if (isJanelaBuildError || softFail) {
+          warnings.push(String(item.label || item.fieldId || 'campo') + ': ignorado (' + truncateText_(buildMsg, 120) + ')');
+        } else {
+          errors.push(String(item.label || item.fieldId || 'campo') + ': ' + truncateText_(buildMsg, 140));
+        }
+      }
+    }
+    if (!requests.length) {
+      const completeNoRequests = missing.length === 0 && errors.length === 0;
+      const partsNoRequests = [];
+      if (missing.length) partsNoRequests.push('Faltando: ' + missing.join(', '));
+      if (warnings.length) partsNoRequests.push('Avisos: ' + truncateText_(warnings.join(' | '), 180));
+      if (errors.length) partsNoRequests.push('Erros: ' + truncateText_(errors.join(' | '), 180));
+      return {
+        complete: completeNoRequests,
+        hasErrors: errors.length > 0,
+        note: completeNoRequests ? 'Sem campos para sincronizar' : ('Parcial: ' + partsNoRequests.join(' | ')),
+      };
+    }
     const responses = UrlFetchApp.fetchAll(requests);
     for (let i = 0; i < responses.length; i++) {
       const resp = responses[i];
-      const meta = pendingFieldRequests[i];
+      const meta = requestMetas[i];
       const code = resp.getResponseCode();
       const bodyText = String(resp.getContentText() || '');
       const isCriticalField = /PLACA|Janela/i.test(String(meta.label || ''));
@@ -3482,7 +3508,7 @@ function updateClickUpTaskCustomFieldsProgramacao_(taskId, rowCtx, options) {
             strategy: fallback.strategy,
           });
         } else if (softFail) {
-          errors.push(meta.label + ': ClickUp field HTTP 400 (fallback falhou): ' + String(fallback.message || '').slice(0, 140));
+          warnings.push(meta.label + ': ignorado (janela dropdown nao mapeada)');
         } else {
           errors.push(meta.label + ': ClickUp field HTTP 400 (fallback falhou): ' + String(fallback.message || '').slice(0, 140));
         }
@@ -4022,7 +4048,7 @@ function syncClickUpProgramacaoOnEditRow_(sheet, rowNumber, cols, options) {
     if (placa) setClickUpTaskCustomFieldValue_(taskId, placaFieldIdResolved, placa);
   }
   if (opts.syncJanela && janelaFieldIdResolved && pcols.faixaAgendaCol) {
-    const janela = String(rowVals[pcols.faixaAgendaCol - 1] || '').trim();
+    const janela = cleanSheetTimeCell_(rowVals[pcols.faixaAgendaCol - 1]);
     if (janela) setClickUpTaskCustomFieldValue_(taskId, janelaFieldIdResolved, janela);
   }
 }
@@ -8407,8 +8433,10 @@ function buildDisponibilidadeContatoIndexForAttemics_() {
 function cleanSheetTimeCell_(raw) {
   const s = String(raw == null ? '' : raw).trim();
   if (!s) return '';
-  // Padrão dd/mm/aaaa ou d/m/aaaa — claramente uma data, não um horário de agenda
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) return '';
+  // Serial de data/hora do Sheets quando campo de horário está vazio.
+  if (/^3[01]\/12\/1899(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(s)) return '';
+  // Padrão dd/mm/aaaa também não é uma faixa de agenda válida para este fluxo.
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/.test(s)) return '';
   return s;
 }
 
@@ -8480,7 +8508,7 @@ function buildAttemicsMessageRowsByPlano_(options) {
       dataCarregamento: cProgDataCarr ? String(p[cProgDataCarr - 1] || '').trim() : '',
       faixaAgendaProgramacao: cProgFaixa ? cleanSheetTimeCell_(p[cProgFaixa - 1]) : '',
       agendaCarregamento: (cProgFaixa ? cleanSheetTimeCell_(p[cProgFaixa - 1]) : '') || (cMsgHora ? cleanSheetTimeCell_(msg[cMsgHora - 1]) : ''),
-      horarioAgendaMsgBase: cMsgHora ? String(msg[cMsgHora - 1] || '').trim() : '',
+      horarioAgendaMsgBase: cMsgHora ? cleanSheetTimeCell_(msg[cMsgHora - 1]) : '',
       regiao: cProgZona ? String(p[cProgZona - 1] || '').trim() : '',
       cidade: cMsgCidade ? String(msg[cMsgCidade - 1] || '').trim() : '',
       bairros: cMsgBairros ? String(msg[cMsgBairros - 1] || '').trim() : '',
