@@ -42,13 +42,14 @@ function executarFlashPassagemTurnoAgora() {
 }
 
 // ----- Coleta de dados -----
-function coletarDadosPassagemTurno_() {
+function coletarDadosPassagemTurno_(opts) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = Session.getScriptTimeZone() || 'America/Sao_Paulo';
   var agora = new Date();
   var hoje = toDateOnly_(agora);
   var ontem = new Date(hoje.getTime());
   ontem.setDate(hoje.getDate() - 1);
+  var apenasOntem = opts && opts.apenasOntem;
 
   var dataRef = Utilities.formatDate(hoje, tz, 'dd/MM/yyyy');
   var dataRefOntem = Utilities.formatDate(ontem, tz, 'dd/MM/yyyy');
@@ -83,7 +84,7 @@ function coletarDadosPassagemTurno_() {
 
     if (cDispData) {
       var dtDisp = parseDateBR_(row[cDispData - 1]) || toDateOnly_(row[cDispData - 1]);
-      if (!dtDisp || (!isSameDay_(dtDisp, hoje) && !isSameDay_(dtDisp, ontem))) continue;
+      if (!dtDisp || (apenasOntem ? !isSameDay_(dtDisp, ontem) : (!isSameDay_(dtDisp, hoje) && !isSameDay_(dtDisp, ontem)))) continue;
     }
     var placa = String(row[cDispPlaca - 1] || '').trim();
     var placaNorm = normalizePlate_(placa);
@@ -187,7 +188,7 @@ function coletarDadosPassagemTurno_() {
         var isToday = dateToCompare && isSameDay_(dateToCompare, hoje);
         var isYesterday = dateToCompare && isSameDay_(dateToCompare, ontem);
 
-        if (!isToday && !isYesterday) continue;
+        if (apenasOntem ? !isYesterday : (!isToday && !isYesterday)) continue;
 
         var placaVal = cJPlaca ? String(jRow[cJPlaca - 1] || '').trim() : '';
         var planoVal = cJPlano ? String(jRow[cJPlano - 1] || '').trim() : '';

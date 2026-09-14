@@ -27,7 +27,7 @@ function enviarFlashEmailTeste() {
 // ----- Núcleo de envio -----
 
 function _enviarFlashEmail_(periodo, isTeste) {
-  var dados = coletarDadosPassagemTurno_();
+  var dados = coletarDadosPassagemTurno_({ apenasOntem: true });
   var html  = _montarHtmlEmail_(dados, periodo, isTeste);
   var assunto = (isTeste ? '[TESTE] ' : '') + _montarAssunto_(dados, periodo);
 
@@ -75,7 +75,8 @@ function _montarAssunto_(dados, periodo) {
   if (periodo === 'MENSAL') {
     return '[THX] Flash Mensal — ' + Utilities.formatDate(agora, tz, 'MMMM/yyyy');
   }
-  return '[THX] Flash Diário — ' + (dados.dataRef || Utilities.formatDate(agora, tz, 'dd/MM/yyyy'));
+  var ontemD = new Date(agora); ontemD.setDate(agora.getDate() - 1);
+  return '[THX] Flash Diário — ' + (dados.dataRefOntem || Utilities.formatDate(ontemD, tz, 'dd/MM/yyyy'));
 }
 
 // ----- Montagem do HTML do email -----
@@ -98,7 +99,8 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
   } else if (periodo === 'MENSAL') {
     periodoStr = Utilities.formatDate(agora, tz, 'MMMM/yyyy');
   } else {
-    periodoStr = d.dataRef || Utilities.formatDate(agora, tz, 'dd/MM/yyyy');
+    var ontemRef = new Date(agora); ontemRef.setDate(agora.getDate() - 1);
+    periodoStr = d.dataRefOntem || Utilities.formatDate(ontemRef, tz, 'dd/MM/yyyy');
   }
 
   var tempoMedioStr = jd.tempoMedioMin > 0 ? _fmtMin_(jd.tempoMedioMin) : '--:--';
@@ -126,6 +128,28 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
       rowsEmCarg += '<tr style="background:' + (j%2===0?'#fffde7':'#fff8e1') + ';"><td style="padding:6px 10px;font-weight:600;">' + _escHtml_(ve.placa) + '</td><td style="padding:6px 10px;">' + _escHtml_(ve.motorista) + '</td></tr>';
     }
   }
+
+  // --- Lista individual de veiculos finalizados ---
+  var rowsVeiculos = '';
+  var corClassif = { 'NORMAL': '#27ae60', 'MEDIO': '#e67e22', 'CRITICO': '#e74c3c' };
+  if (jd.veiculosCarregados && jd.veiculosCarregados.length) {
+    for (var vi = 0; vi < jd.veiculosCarregados.length; vi++) {
+      var vv = jd.veiculosCarregados[vi];
+      var clKey = _normStr_(vv.classificacao || '');
+      var clColor = clKey.indexOf('CRITICO') !== -1 ? '#e74c3c' :
+                    clKey.indexOf('MEDIO')   !== -1 ? '#e67e22' : '#27ae60';
+      var dotCl = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + clColor + ';margin-right:4px;"></span>';
+      rowsVeiculos +=
+        '<tr style="background:' + (vi%2===0?'#f9fafc':'#fff') + ';border-bottom:1px solid #eee;">' +
+        '<td style="padding:7px 10px;font-weight:700;font-size:13px;">' + _escHtml_(vv.placa) + '</td>' +
+        '<td style="padding:7px 10px;font-size:12px;color:#333;">' + _escHtml_(vv.motorista) + '</td>' +
+        '<td style="padding:7px 10px;font-size:12px;color:#555;text-align:center;">' + _escHtml_(vv.perfil || '-') + '</td>' +
+        '<td style="padding:7px 10px;font-size:12px;text-align:center;font-weight:600;">' + _escHtml_(vv.duracao || '-') + '</td>' +
+        '<td style="padding:7px 10px;font-size:11px;text-align:center;">' + dotCl + _escHtml_(vv.classificacao || '-') + '</td>' +
+        '</tr>';
+    }
+  }
+  if (!rowsVeiculos) rowsVeiculos = '<tr><td colspan="5" style="padding:10px;color:#aaa;text-align:center;font-style:italic;">Nenhum veiculo finalizado</td></tr>';
 
   // --- Média por perfil ---
   var rowsPerfil = '';
@@ -172,8 +196,8 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
   '<tr><td style="background:#0d1b3e;padding:28px 30px;border-radius:12px 12px 0 0;">' +
   '<span style="color:#fff;font-size:24px;font-weight:700;letter-spacing:1px;">THX GROUP</span><br>' +
   '<span style="color:#7eb3f5;font-size:13px;">Operações Guarulhos — Café 3 Corações</span><br><br>' +
-  '<span style="background:#1a4a8a;color:#fff;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:700;">Jornada Interna — Flash ' + _escHtml_(labelPeriodo) + '</span>' +
-  '<div style="margin-top:10px;color:#aac8f0;font-size:12px;">Periodo: ' + _escHtml_(periodoStr) + ' &nbsp;|&nbsp; Gerado: ' + _escHtml_(d.horaAtual || '') + '</div>' +
+  '<span style="background:#1a4a8a;color:#fff;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:700;">Jornada Interna — Flash ' + _escHtml_(labelPeriodo) + ' | ' + _escHtml_(periodoStr) + '</span>' +
+  '<div style="margin-top:8px;color:#aac8f0;font-size:12px;">Referencia: Dia anterior &nbsp;|&nbsp; Gerado em: ' + _escHtml_(d.horaAtual || '') + '</div>' +
   '</td></tr>' +
 
   // MÉTRICAS PRINCIPAIS
@@ -214,6 +238,18 @@ function _montarHtmlEmail_(dados, periodo, isTeste) {
     '</td>' +
     '</tr></table></div>'
   ) : '') +
+
+  // Tabela veiculos individuais
+  '<div style="font-size:14px;font-weight:700;color:#0d1b3e;border-left:4px solid #1a4a8a;padding-left:10px;margin-bottom:12px;">Veiculos Finalizados (' + (jd.veiculosCarregados ? jd.veiculosCarregados.length : 0) + ')</div>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dde0e8;border-radius:8px;overflow:hidden;margin-bottom:24px;">' +
+  '<tr style="background:#0d1b3e;">' +
+    '<th style="padding:8px 10px;color:#fff;font-size:11px;text-align:left;">Placa</th>' +
+    '<th style="padding:8px 10px;color:#fff;font-size:11px;text-align:left;">Condutor</th>' +
+    '<th style="padding:8px 10px;color:#fff;font-size:11px;text-align:center;">Perfil</th>' +
+    '<th style="padding:8px 10px;color:#fff;font-size:11px;text-align:center;">Tempo</th>' +
+    '<th style="padding:8px 10px;color:#fff;font-size:11px;text-align:center;">Status</th>' +
+  '</tr>' +
+  rowsVeiculos + '</table>' +
 
   // Média por perfil
   '<div style="font-size:14px;font-weight:700;color:#0d1b3e;border-left:4px solid #1a4a8a;padding-left:10px;margin-bottom:12px;">Tempo Medio por Tipo de Veiculo</div>' +
@@ -271,7 +307,14 @@ function _escHtml_(str) {
 
 function _normStr_(str) {
   if (!str) return '';
-  return String(str).toUpperCase().trim();
+  return String(str).toUpperCase()
+    .replace(/[�-��-�]/g, 'A')
+    .replace(/[�-��-�]/g, 'E')
+    .replace(/[�-��-�]/g, 'I')
+    .replace(/[�-��-�]/g, 'O')
+    .replace(/[�-��-�]/g, 'U')
+    .replace(/[��]/g, 'C')
+    .trim();
 }
 
 function configurarEmailsFlash() {
