@@ -3872,7 +3872,10 @@ function runAtualizarDisponibilidadeClickUp_(options) {
     });
 
     ctx.step = 'fetch_clickup';
-    const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, debug);
+    const tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, {
+      debug: debug,
+      statuses: [CONFIG.CLICKUP.STATUS_ALVO, CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO].filter(Boolean)
+    });
     if (debug) {
       appDebugPrint_('[DEBUG] ClickUp tasks baixadas', {
         total: tasks.length,
@@ -4467,16 +4470,26 @@ function columnToLetter_(column) {
   return s || 'A';
 }
 
-function fetchClickUpTasksByList_(listId, debug) {
+function fetchClickUpTasksByList_(listId, options) {
+  const opts = options || {};
+  const debug = !!opts.debug;
+  const statuses = Array.isArray(opts.statuses) ? opts.statuses : [];
+  const tags = Array.isArray(opts.tags) ? opts.tags : [];
+  
   const allTasks = [];
   let page = 0;
+
+  let queryBase = 'archived=false&subtasks=false&include_closed=true';
+  statuses.forEach(function (s) { queryBase += '&statuses[]=' + encodeURIComponent(s); });
+  tags.forEach(function (t) { queryBase += '&tags[]=' + encodeURIComponent(t); });
 
   while (true) {
     const url =
       CONFIG.CLICKUP.BASE_URL +
       '/list/' +
       encodeURIComponent(String(listId)) +
-      '/task?archived=false&subtasks=false&include_closed=true&page=' +
+      '/task?' + queryBase +
+      '&page=' +
       page +
       '&page_size=' +
       CONFIG.CLICKUP.PAGE_SIZE;
@@ -4866,6 +4879,9 @@ function parseClickUpTaskDisponibilidade_(task) {
     contato: String(contato || '').trim(),
     unidade: String(unidade || '').trim(),
     status: String(status || '').trim(),
+    tags: Array.isArray(task.tags) ? task.tags.map(function (t) { 
+      return (typeof t === 'object' ? (t.name || '') : String(t)).trim(); 
+    }).filter(Boolean) : [],
   };
 
   return parsed;
@@ -4912,14 +4928,17 @@ function resolveClickUpCustomFieldValue_(cf) {
 
 function filtrarMotoristasDisponibilidade_(items) {
   return (items || []).filter(function (item) {
+    const unitTarget = normalizeTextLoose_(CONFIG.CLICKUP.UNIDADE_ALVO);
     const unidade = normalizeTextLoose_(item.unidade);
+    const tags = (item.tags || []).map(normalizeTextLoose_);
     const status = normalizeTextLoose_(item.status);
     const s1 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO);
     const s2 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO || '');
-    return (
-      unidade === normalizeTextLoose_(CONFIG.CLICKUP.UNIDADE_ALVO) &&
-      (status === s1 || (s2 && status === s2))
-    );
+
+    const unitMatch = unidade === unitTarget || tags.indexOf(unitTarget) !== -1;
+    const statusMatch = status === s1 || (s2 && status === s2);
+
+    return unitMatch && statusMatch;
   });
 }
 
