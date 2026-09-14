@@ -5528,9 +5528,8 @@ function runAlimentarContainer_(options) {
     const pIdxNota = CONFIG.MAIN_HEADERS.indexOf('Nota fiscal');
 
     ctx.step = 'greenmile_enriquecimento';
-    const routeKeys = baseRows.map(function (r) { return r.planos; });
-    const routeKeysMissingNota = routeKeys.filter(function (planos) {
-      const key = String(planos == null ? '' : planos).trim();
+    const routeKeys = baseRows.map(function (r) { return String(r.planos == null ? '' : r.planos).trim(); });
+    const routeKeysMissingNota = routeKeys.filter(function (key) {
       if (!key) return false;
       const existing = existingProgramacaoByPlano[key];
       if (!existing) return true;
