@@ -204,6 +204,99 @@ function diagnosticarAuthClickUp() {
   };
 }
 
+function diagnosticarIdsClickUp() {
+  const token = getClickUpApiKey_();
+  const headers = { Authorization: token };
+  const base = CONFIG.CLICKUP.BASE_URL;
+  const cfg = (CONFIG.CLICKUP && CONFIG.CLICKUP.PROGRAMACAO) || {};
+  const toCheck = [
+    { label: 'LIST_ID_MOTORISTAS', type: 'list', id: CONFIG.CLICKUP.LIST_ID_MOTORISTAS },
+    { label: 'LIST_ID_CARDS (Programacao)', type: 'list', id: cfg.LIST_ID_CARDS },
+    { label: 'LIST_ID_MAPA', type: 'list', id: cfg.LIST_ID_MAPA },
+    { label: 'TEMPLATE_TASK_ID', type: 'task', id: cfg.TEMPLATE_TASK_ID },
+  ];
+
+  const results = toCheck.map(function(item) {
+    if (!item.id) return { label: item.label, id: item.id, ok: false, status: 'ID nao configurado' };
+    const url = base + (item.type === 'list' ? '/list/' : '/task/') + encodeURIComponent(String(item.id));
+    try {
+      const resp = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
+      const code = resp.getResponseCode();
+      const body = resp.getContentText() || '';
+      const ok = code >= 200 && code < 300;
+      const isShard = code === 404 && body.indexOf('SHARD_009') !== -1;
+      return {
+        label: item.label,
+        id: item.id,
+        ok: ok,
+        status: ok ? 'OK' : (isShard ? 'NAO ENCONTRADO (SHARD_009) — ID incorreto ou recurso deletado' : 'HTTP ' + code),
+      };
+    } catch (e) {
+      return { label: item.label, id: item.id, ok: false, status: 'Erro: ' + e.message };
+    }
+  });
+
+  // Descobrir listas validas do workspace para facilitar correcao
+  let workspaceLists = [];
+  try {
+    const teamsResp = UrlFetchApp.fetch(base + '/team', { headers: headers, muteHttpExceptions: true });
+    if (teamsResp.getResponseCode() === 200) {
+      const teams = (JSON.parse(teamsResp.getContentText()).teams) || [];
+      teams.forEach(function(team) {
+        try {
+          const spacesResp = UrlFetchApp.fetch(base + '/team/' + team.id + '/space?archived=false', { headers: headers, muteHttpExceptions: true });
+          if (spacesResp.getResponseCode() !== 200) return;
+          const spaces = (JSON.parse(spacesResp.getContentText()).spaces) || [];
+          spaces.forEach(function(space) {
+            try {
+              // Listas diretas no space
+              const slResp = UrlFetchApp.fetch(base + '/space/' + space.id + '/list?archived=false', { headers: headers, muteHttpExceptions: true });
+              if (slResp.getResponseCode() === 200) {
+                (JSON.parse(slResp.getContentText()).lists || []).forEach(function(l) {
+                  workspaceLists.push({ id: l.id, name: l.name, space: space.name, folder: null });
+                });
+              }
+              // Listas dentro de folders
+              const foldersResp = UrlFetchApp.fetch(base + '/space/' + space.id + '/folder?archived=false', { headers: headers, muteHttpExceptions: true });
+              if (foldersResp.getResponseCode() === 200) {
+                (JSON.parse(foldersResp.getContentText()).folders || []).forEach(function(folder) {
+                  (folder.lists || []).forEach(function(l) {
+                    workspaceLists.push({ id: l.id, name: l.name, space: space.name, folder: folder.name });
+                  });
+                });
+              }
+            } catch (e2) {}
+          });
+        } catch (e1) {}
+      });
+    }
+  } catch (e0) {}
+
+  const report = {
+    configuredIds: results,
+    workspaceLists: workspaceLists,
+  };
+
+  appCodeLog_('[DIAGNOSTICO] IDs ClickUp', report);
+
+  const lines = ['=== DIAGNOSTICO IDS CLICKUP ===\n'];
+  results.forEach(function(r) {
+    lines.push((r.ok ? '✅' : '❌') + ' ' + r.label + ' (' + r.id + '): ' + r.status);
+  });
+  if (workspaceLists.length) {
+    lines.push('\n--- LISTAS ENCONTRADAS NO WORKSPACE ---');
+    workspaceLists.forEach(function(l) {
+      lines.push('ID: ' + l.id + ' | ' + l.name + ' [Space: ' + l.space + (l.folder ? ', Folder: ' + l.folder : '') + ']');
+    });
+  } else {
+    lines.push('\n[Nao foi possivel listar listas do workspace]');
+  }
+  const msg = lines.join('\n');
+  console.log(msg);
+  try { SpreadsheetApp.getUi().alert('Diagnóstico ClickUp', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch(e) {}
+  return report;
+}
+
 function diagnosticarEstruturaMotoristasClickUp() {
   const ctx = { step: 'diagnostico_clickup' };
   try {
@@ -494,6 +587,8 @@ function onOpen() {
   menuClickUp
     .addItem('\u{1f4cc} Criar Cards', 'criarCardsClickUpProgramacao')
     .addItem('\u{1f50e} Buscando dados', 'preencherCamposCardsClickUpProgramacao')
+    .addSeparator()
+    .addItem('🔍 Diagnosticar IDs ClickUp', 'diagnosticarIdsClickUp')
     ;
 
   menuOps.addToUi();
@@ -4612,7 +4707,11 @@ function fetchClickUpTasksByList_(listId, options) {
     const code = response.getResponseCode();
     const text = response.getContentText();
     if (code !== 200) {
-      throw new Error('ClickUp HTTP ' + code + ': ' + text.slice(0, 300));
+      let errMsg = 'ClickUp HTTP ' + code + ' (lista: ' + listId + '): ' + text.slice(0, 300);
+      if (code === 404 && text.indexOf('SHARD_009') !== -1) {
+        errMsg = 'Lista ClickUp nao encontrada (ID: ' + listId + '). Verifique o ID em CONFIG.CLICKUP. Execute "Diagnosticar IDs ClickUp" no menu para listar os IDs validos. Detalhe: ' + text.slice(0, 200);
+      }
+      throw new Error(errMsg);
     }
 
     let parsed;
@@ -4675,7 +4774,11 @@ function fetchClickUpTaskById_(taskId) {
   const code = response.getResponseCode();
   const text = response.getContentText();
   if (code !== 200) {
-    throw new Error('ClickUp task HTTP ' + code + ': ' + text.slice(0, 300));
+    let errMsg = 'ClickUp task HTTP ' + code + ' (task: ' + taskId + '): ' + text.slice(0, 300);
+    if (code === 404 && text.indexOf('SHARD_009') !== -1) {
+      errMsg = 'Task ClickUp nao encontrada (ID: ' + taskId + '). Se for o TEMPLATE_TASK_ID, verifique CONFIG.CLICKUP.PROGRAMACAO.TEMPLATE_TASK_ID. Execute "Diagnosticar IDs ClickUp" no menu para ajuda. Detalhe: ' + text.slice(0, 200);
+    }
+    throw new Error(errMsg);
   }
 
   try {
