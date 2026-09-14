@@ -43,15 +43,15 @@ const CONFIG = {
     BASE_URL: 'https://api.clickup.com/api/v2',
     LIST_ID_MOTORISTAS: '901308597214',
     PAGE_SIZE: 500,
-    UNIDADE_FIELD: 'Cliente / Unidade',
+    UNIDADE_FIELD: '🟢 Cliente / Unidade',
     UNIDADE_ALVO: 'CAFÉ 3C GUARULHOS',
     STATUS_FIELD: 'STATUS',
     STATUS_ALVO: 'MOTORISTA ATIVO',
     STATUS_ALVO_SECUNDARIO: 'AGUARDANDO PRIMEIRA ESCALA',
-    PLACA_FIELD: 'Placa',
-    PERFIL_FIELD: 'Perfil de veículo',
-    MOTORISTA_FIELD: 'Nome Motorista',
-    CONTATO_FIELD: 'Contato Motorista',
+    PLACA_FIELD: '🟢 Placa',
+    PERFIL_FIELD: '🟢 Perfil de veículo',
+    MOTORISTA_FIELD: '🟢 Nome Motorista',
+    CONTATO_FIELD: '🟢 Contato Motorista',
     PROGRAMACAO: {
       LIST_ID_CARDS: '901314444834',
       LIST_ID_MAPA: '90136429320',
@@ -4982,18 +4982,14 @@ function filtrarMotoristasDisponibilidade_(items, debug) {
     const s1 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO);
     const s2 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO || '');
 
-    const unitMatch = unidade === unitTarget || tags.indexOf(unitTarget) !== -1;
+    const unitMatch = unidade === unitTarget || unidade.indexOf(unitTarget) !== -1 || unitTarget.indexOf(unidade) !== -1 || tags.indexOf(unitTarget) !== -1;
     const statusMatch = status === s1 || (s2 && status === s2);
 
-    // LOG BRUTAL DE DIAGNÓSTICO (Aparece sempre para os primeiros 5)
-    if (items.indexOf(item) < 5) {
-      appDebugPrint_('[TRACE] Validando motorista ' + (items.indexOf(item) + 1), {
-        nome: item.motorista,
-        unidade: { valor: item.unidade, normalizado: unidade, alvo: unitTarget, match: unidade === unitTarget },
-        status: { valor: item.status, normalizado: status, alvo1: s1, alvo2: s2, match: statusMatch },
-        tags: { lista: item.tags, match: tags.indexOf(unitTarget) !== -1 },
-        finalMatch: unitMatch && statusMatch
-      });
+    // LOG BRUTAL DE DIAGNÓSTICO (FORÇADO NO CONSOLE)
+    if (items.indexOf(item) < 3) {
+      const traceMsg = '[TRACE] ' + item.motorista + ' | Unidade: ' + item.unidade + ' (' + unidade + ') | Status: ' + item.status + ' (' + status + ') | Match: ' + (unitMatch && statusMatch);
+      console.log(traceMsg);
+      appDebugPrint_(traceMsg);
     }
 
     if (debug) {
