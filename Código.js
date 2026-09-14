@@ -553,7 +553,7 @@ function migrateHardcodedSecretsToProperties(input) {
     GREENMILE_LOGIN_USERNAME: 'Kleberthx',
     GREENMILE_LOGIN_PASSWORD: 'wYyB9vMaDBj8d@W',
     ATTEMICS_ACCESS_TOKEN: '669557bad8699aa536cfb9bb',
-    FLASH_LAST_MILE_CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAAAtIxsN8E/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=0ykhfXhAadLLFBm3bXeSr4oGFikl8YumJ-KiXK374bs',
+    FLASH_LAST_MILE_CHAT_WEBHOOK_URL: 'https://chat.googleapis.com/v1/spaces/AAAAJaf6vHA/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=lz0cWcjsxvS6dIDE07iwxW-y1myfQDBoBAXciG8EBHM',
   };
   const legacyClickUpToken = String(props.getProperty('CLICKUP_TOKEN') || '').trim();
   const currentClickUpApiKey = String(props.getProperty(SECRET_KEYS_.CLICKUP_API_KEY) || '').trim();

@@ -4,7 +4,7 @@
 // ============================================================
 
 var PASSAGEM_TURNO_WEBHOOK_ =
-  'https://chat.googleapis.com/v1/spaces/AAAAJaf6vHA/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=CG0XzwiO8XTh2198Whuf5r97glWbnkwbZcD7nAyfTWA';
+  'https://chat.googleapis.com/v1/spaces/AAAAJaf6vHA/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=lz0cWcjsxvS6dIDE07iwxW-y1myfQDBoBAXciG8EBHM';
 
 // ----- Funções públicas (Acionadores do Menu) -----
 

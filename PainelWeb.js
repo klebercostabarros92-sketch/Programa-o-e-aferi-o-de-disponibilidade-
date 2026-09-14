@@ -4,6 +4,18 @@
  */
 
 // ═══════════════════════════════════════════════════════════════════
+// ATUALIZAR WEBHOOK DO GOOGLE CHAT
+// Execute esta função UMA VEZ no editor do Apps Script após o clasp push
+// ═══════════════════════════════════════════════════════════════════
+
+function atualizarWebhookChat() {
+  var novoWebhook = 'https://chat.googleapis.com/v1/spaces/AAAAJaf6vHA/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=lz0cWcjsxvS6dIDE07iwxW-y1myfQDBoBAXciG8EBHM';
+  PropertiesService.getScriptProperties().setProperty('FLASH_LAST_MILE_CHAT_WEBHOOK_URL', novoWebhook);
+  console.log('Webhook atualizado com sucesso: ' + novoWebhook);
+  return 'OK — Webhook do Google Chat atualizado.';
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // DIAGNÓSTICO — lista abas disponíveis (útil para debug)
 // ═══════════════════════════════════════════════════════════════════
 
