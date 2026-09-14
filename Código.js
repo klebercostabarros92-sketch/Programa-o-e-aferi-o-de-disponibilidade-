@@ -12,7 +12,7 @@ const CONFIG = {
     placa: 'Placa', 
     motorista: 'Motorista', 
     greenMileStatus: 'GREEN MILE', 
-    attemicsStatus: 'ATTEMICS', 
+    attemicsStatus: 'WhatsApp', 
     clickupStatus: 'CLICKUP STATUS', 
     clickup: 'CLICKUP', 
     notaFiscal: 'Nota fiscal' 
@@ -24,7 +24,7 @@ const CONFIG = {
   TARGET_SHEET_NAME: 'Programa\u00e7\u00e3o',
   MESSAGE_SHEET_NAME: 'Programa\u00e7\u00e3o_Mensagem_Base',
   HEADER_SCAN_MAX_ROWS: 10,
-  MAIN_HEADERS: ['PLANOS', 'COMPLEMENTO', 'PERFIL', 'Data de sa\u00edda', 'Data de carregamento', 'Faixa de agenda', 'Zona', 'Placa', 'Motorista', 'GREEN MILE', 'ATTEMICS', 'CLICKUP STATUS', 'CLICKUP', 'Nota fiscal'],
+  MAIN_HEADERS: ['PLANOS', 'COMPLEMENTO', 'PERFIL', 'Data de sa\u00edda', 'Data de carregamento', 'Faixa de agenda', 'Zona', 'Placa', 'Motorista', 'GREEN MILE', 'WhatsApp', 'CLICKUP STATUS', 'CLICKUP', 'Nota fiscal'],
   MESSAGE_HEADERS: ['PLANOS', 'Hor\u00e1rio agenda', 'SENHA/PROTOC.', 'Quantidade de entregas', 'Peso', 'Valor', 'Cidades', 'Bairros'],
   GREENMILE: {
     ENABLED: true,
@@ -41,12 +41,13 @@ const CONFIG = {
   CLICKUP: {
     TOKEN: '',
     BASE_URL: 'https://api.clickup.com/api/v2',
-    LIST_ID_MOTORISTAS: '901310964393',
+    LIST_ID_MOTORISTAS: '901324284828',
     PAGE_SIZE: 500,
     UNIDADE_FIELD: 'UNIDADE',
     UNIDADE_ALVO: '3C GUARULHOS',
     STATUS_FIELD: 'STATUS',
     STATUS_ALVO: 'Ativo',
+    STATUS_ALVO_SECUNDARIO: '3C - GRU aguardando a primeira escala',
     PLACA_FIELD: 'PLACA',
     PERFIL_FIELD: 'MODELO',
     MOTORISTA_FIELD: 'MOTORISTA',
@@ -395,8 +396,8 @@ function onOpen() {
   }
 
   menuMsg
-    .addItem('\u{1f4e8} Enviar 1a Mensagem', 'enviarAttemicsPrimeiraMensagemTeste')
-    .addItem('\u{1f4ec} Enviar 2a Mensagem', 'enviarAttemicsSegundaMensagemTeste');
+    .addItem('\ud83d\udce8 Enviar 1a Mensagem (WhatsApp)', 'enviarAttemicsPrimeiraMensagemTeste')
+    .addItem('\ud83d\udcec Enviar 2a Mensagem (WhatsApp)', 'enviarAttemicsSegundaMensagemTeste');
 
   menu3C
     .addItem('Atualizar planilhas', 'atualizarPlanilhas3Coracoes')
@@ -4913,9 +4914,11 @@ function filtrarMotoristasDisponibilidade_(items) {
   return (items || []).filter(function (item) {
     const unidade = normalizeTextLoose_(item.unidade);
     const status = normalizeTextLoose_(item.status);
+    const s1 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO);
+    const s2 = normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO_SECUNDARIO || '');
     return (
       unidade === normalizeTextLoose_(CONFIG.CLICKUP.UNIDADE_ALVO) &&
-      status === normalizeTextLoose_(CONFIG.CLICKUP.STATUS_ALVO)
+      (status === s1 || (s2 && status === s2))
     );
   });
 }
@@ -5331,7 +5334,7 @@ function runAlimentarContainer_(options) {
     const existingMensagemByPlano = buildRowsByKeyIndex_(existingMensagemRows, 0);
     const pIdxZona = CONFIG.MAIN_HEADERS.indexOf('Zona');
     const pIdxGmStatus = CONFIG.MAIN_HEADERS.indexOf('GREEN MILE');
-    const pIdxAttemics = CONFIG.MAIN_HEADERS.indexOf('ATTEMICS');
+    const pIdxAttemics = CONFIG.MAIN_HEADERS.indexOf('WhatsApp');
     const pIdxClickupStatus = CONFIG.MAIN_HEADERS.indexOf('CLICKUP STATUS');
     const pIdxClickup = CONFIG.MAIN_HEADERS.indexOf('CLICKUP');
     const pIdxNota = CONFIG.MAIN_HEADERS.indexOf('Nota fiscal');
@@ -7696,12 +7699,12 @@ function computeAttemicsProgramacaoVisualStateFromLogRows_(rows, dateRef, planoP
   }
   if (firstSent && (secondSent || secondDispensed)) {
     const st = Object.assign({}, palette.ENVIADO);
-    st.note = secondDispensed ? '2a dispensada: horario ja enviado na 1a' : 'Fluxo Attemics concluido';
+    st.note = secondDispensed ? '2a dispensada: horario ja enviado na 1a' : 'Fluxo WhatsApp concluido';
     return st;
   }
   if (hasApiError) {
     const st = Object.assign({}, palette.ERRO_API);
-    st.note = 'Erro de API Attemics';
+    st.note = 'Erro de API WhatsApp';
     return st;
   }
   if (firstSent) {
@@ -10258,6 +10261,18 @@ function getOrCreateFilaWhatsAppSheet_(ss) {
 }
 
 function doGet(e) {
+  if (e && e.parameter && e.parameter.action === 'debug_clickup') {
+    try {
+      var tasks = fetchClickUpTasksByList_(CONFIG.CLICKUP.LIST_ID_MOTORISTAS, false);
+      var parsed = tasks.slice(0, 10).map(parseClickUpTaskDisponibilidade_);
+      return ContentService.createTextOutput(JSON.stringify({ raw: tasks.slice(0, 5), parsed: parsed }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(JSON.stringify({ error: String(err) }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
   // 1. Dashboard Fallback (se não for requisição do chatbot)
   if (!e || !e.parameter || e.parameter.action !== 'pending') {
     if (typeof renderFlashDashboard_ === 'function') {
