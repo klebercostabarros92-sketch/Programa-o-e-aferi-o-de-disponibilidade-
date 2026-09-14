@@ -626,6 +626,7 @@ function onOpen() {
     .addItem('Atualizar planilhas', 'atualizarPlanilhas3Coracoes')
     .addItem('🔄 Sincronizar Disponibilidade (Padrão D,I,P)', 'syncDisponibilidadePara3CoracoesExterno')
     .addItem('📋 Reportar Placas', 'reportarPlacas')
+    .addItem('✉️ Solicitar inclusão GM7', 'enviarSolicitacaoInclusaoGM7')
     .addItem('✉️ Cobrar XML', 'cobrarXmlProgramacaoPorEmail')
     .addSeparator()
     .addItem('\ud83d\udce6 Processar XML agora', 'processarXmlRecebidosAgora')
