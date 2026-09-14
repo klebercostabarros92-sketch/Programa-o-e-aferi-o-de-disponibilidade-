@@ -1,7 +1,4 @@
-function doGet(e) {
-  return renderFlashDashboard_(e);
-}
-
+// doGet function moved to Código.js to prevent conflicts
 function renderFlashDashboard_(e) {
   var tpl = HtmlService.createTemplateFromFile('FlashDashboard');
   tpl.payload = JSON.stringify(getFlashDashboardData_());

@@ -10258,6 +10258,15 @@ function getOrCreateFilaWhatsAppSheet_(ss) {
 }
 
 function doGet(e) {
+  // 1. Dashboard Fallback (se não for requisição do chatbot)
+  if (!e || !e.parameter || e.parameter.action !== 'pending') {
+    if (typeof renderFlashDashboard_ === 'function') {
+      return renderFlashDashboard_(e);
+    }
+    return ContentService.createTextOutput("Chatbot API is running.");
+  }
+
+  // 2. Chatbot Fetch Pending Messages (action === 'pending')
   try {
     var ss = getFilaWhatsAppSpreadsheet_();
     var sheet = ss.getSheetByName(FILA_WHATSAPP_SHEET_NAME_);
